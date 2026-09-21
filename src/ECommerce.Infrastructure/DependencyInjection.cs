@@ -89,6 +89,7 @@ public static class DependencyInjection
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IInventoryService, InventoryService>();
+        services.AddScoped<IPaymentGateway, StripePaymentGateway>();
 
         // 6. Background Services
         services.AddHostedService<BackgroundJobs.OrderExpirationBackgroundService>();
