@@ -88,6 +88,10 @@ public static class DependencyInjection
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<IInventoryService, InventoryService>();
+
+        // 6. Background Services
+        services.AddHostedService<BackgroundJobs.OrderExpirationBackgroundService>();
 
         return services;
     }
