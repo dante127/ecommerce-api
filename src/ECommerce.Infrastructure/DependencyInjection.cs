@@ -81,6 +81,7 @@ public static class DependencyInjection
             options.Configuration = redisConnection;
             options.InstanceName = "ECommerce_";
         });
+        services.AddScoped<ICacheService, Caching.RedisCacheService>();
 
         // 5. Identity & Context Services
         services.AddHttpContextAccessor();

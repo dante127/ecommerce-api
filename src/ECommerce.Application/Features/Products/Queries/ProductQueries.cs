@@ -1,0 +1,191 @@
+using System.Security.Cryptography;
+using System.Text;
+using ECommerce.Application.Common.Interfaces;
+using ECommerce.Application.Common.Models;
+using ECommerce.Application.Features.Products.DTOs;
+using ECommerce.Domain.Enums;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace ECommerce.Application.Features.Products.Queries;
+
+public sealed record GetProductsQuery(
+    string? Search = null,
+    Guid? CategoryId = null,
+    decimal? MinPrice = null,
+    decimal? MaxPrice = null,
+    string? SortBy = null,
+    string? SortDirection = null,
+    int Page = 1,
+    int PageSize = 20) : IRequest<Result<PagedList<ProductResponse>>>;
+
+public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Result<PagedList<ProductResponse>>>
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICacheService _cacheService;
+
+    public GetProductsQueryHandler(IApplicationDbContext context, ICacheService cacheService)
+    {
+        _context = context;
+        _cacheService = cacheService;
+    }
+
+    public async Task<Result<PagedList<ProductResponse>>> Handle(GetProductsQuery request, CancellationToken cancellationToken)
+    {
+        // 1. Check Redis Cache
+        var version = await _cacheService.GetVersionAsync("catalog:version", cancellationToken);
+        var canonicalKey = GenerateCanonicalQueryHash(request);
+        var cacheKey = $"catalog:v{version}:products:{canonicalKey}";
+
+        var cachedResult = await _cacheService.GetAsync<PagedList<ProductResponse>>(cacheKey, cancellationToken);
+        if (cachedResult != null)
+        {
+            return Result<PagedList<ProductResponse>>.Success(cachedResult);
+        }
+
+        // 2. Cache Miss: Query Database
+        var query = _context.Products
+            .AsNoTracking()
+            .Include(p => p.Category)
+            .Include(p => p.Inventory)
+            .Where(p => p.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(p => p.Name.ToLower().Contains(search) || p.Description.ToLower().Contains(search));
+        }
+
+        if (request.CategoryId.HasValue)
+        {
+            query = query.Where(p => p.CategoryId == request.CategoryId.Value);
+        }
+
+        if (request.MinPrice.HasValue)
+        {
+            query = query.Where(p => p.Price >= request.MinPrice.Value);
+        }
+
+        if (request.MaxPrice.HasValue)
+        {
+            query = query.Where(p => p.Price <= request.MaxPrice.Value);
+        }
+
+        // Sorting
+        var isDescending = string.Equals(request.SortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        query = request.SortBy?.ToLowerInvariant() switch
+        {
+            "price" => isDescending ? query.OrderByDescending(p => p.Price) : query.OrderBy(p => p.Price),
+            "createdat" => isDescending ? query.OrderByDescending(p => p.CreatedAt) : query.OrderBy(p => p.CreatedAt),
+            _ => isDescending ? query.OrderByDescending(p => p.Name) : query.OrderBy(p => p.Name)
+        };
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var page = request.Page > 0 ? request.Page : 1;
+        var pageSize = request.PageSize is > 0 and <= 100 ? request.PageSize : 20;
+
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(p => new
+            {
+                p.Id,
+                p.Sku,
+                p.Name,
+                p.Description,
+                p.Price,
+                p.CategoryId,
+                CategoryName = p.Category.Name,
+                Stock = p.Inventory != null ? p.Inventory.Quantity : 0,
+                p.RowVersion,
+                p.CreatedAt
+            })
+            .ToListAsync(cancellationToken);
+
+        var productResponses = items.Select(p =>
+        {
+            var availability = p.Stock switch
+            {
+                <= 0 => AvailabilityStatus.OutOfStock,
+                <= 5 => AvailabilityStatus.LowStock,
+                _ => AvailabilityStatus.InStock
+            };
+
+            return new ProductResponse(
+                p.Id,
+                p.Sku,
+                p.Name,
+                p.Description,
+                p.Price,
+                p.CategoryId,
+                p.CategoryName,
+                availability,
+                p.RowVersion,
+                p.CreatedAt);
+        }).ToList();
+
+        var pagedList = new PagedList<ProductResponse>(productResponses, page, pageSize, totalCount);
+
+        // 3. Store in Redis with absolute 5-minute TTL
+        await _cacheService.SetAsync(cacheKey, pagedList, TimeSpan.FromMinutes(5), cancellationToken);
+
+        return Result<PagedList<ProductResponse>>.Success(pagedList);
+    }
+
+    private static string GenerateCanonicalQueryHash(GetProductsQuery q)
+    {
+        var raw = $"s={q.Search}&c={q.CategoryId}&min={q.MinPrice}&max={q.MaxPrice}&sb={q.SortBy}&sd={q.SortDirection}&p={q.Page}&ps={q.PageSize}";
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
+        return Convert.ToHexString(hashBytes).ToLowerInvariant();
+    }
+}
+
+public sealed record GetProductByIdQuery(Guid Id) : IRequest<Result<ProductDetailResponse>>;
+
+public sealed class GetProductByIdQueryHandler : IRequestHandler<GetProductByIdQuery, Result<ProductDetailResponse>>
+{
+    private readonly IApplicationDbContext _context;
+
+    public GetProductByIdQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<Result<ProductDetailResponse>> Handle(GetProductByIdQuery request, CancellationToken cancellationToken)
+    {
+        var product = await _context.Products
+            .AsNoTracking()
+            .Include(p => p.Category)
+            .Include(p => p.Inventory)
+            .Where(p => p.Id == request.Id && p.IsActive)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (product == null)
+        {
+            return Result<ProductDetailResponse>.Failure(Error.NotFound("Product.NotFound", "Product not found."));
+        }
+
+        var stock = product.Inventory?.Quantity ?? 0;
+        var availability = stock switch
+        {
+            <= 0 => AvailabilityStatus.OutOfStock,
+            <= 5 => AvailabilityStatus.LowStock,
+            _ => AvailabilityStatus.InStock
+        };
+
+        var response = new ProductDetailResponse(
+            product.Id,
+            product.Sku,
+            product.Name,
+            product.Description,
+            product.Price,
+            product.CategoryId,
+            product.Category.Name,
+            stock,
+            availability,
+            product.RowVersion,
+            product.CreatedAt);
+
+        return Result<ProductDetailResponse>.Success(response);
+    }
+}
