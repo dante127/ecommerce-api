@@ -52,7 +52,8 @@ builder.Services.AddApiVersioning(options =>
 // 4. OpenAPI / Swagger
 builder.Services.AddSwaggerDocumentation();
 
-// 5. ProblemDetails
+// 5. ProblemDetails & Global Exception Handler
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 // 6. Forwarded Headers for Proxy Support
@@ -96,6 +97,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 var app = builder.Build();
 
 // Pipeline Configuration
+app.UseExceptionHandler();
 app.UseForwardedHeaders();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
