@@ -3,6 +3,8 @@ using System.Threading.RateLimiting;
 using Asp.Versioning;
 using ECommerce.Api.Extensions;
 using ECommerce.Api.Middleware;
+using ECommerce.Application;
+using ECommerce.Infrastructure;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Serilog;
@@ -20,6 +22,10 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .Enrich.WithProperty("Environment", context.HostingEnvironment.EnvironmentName)
         .WriteTo.Console(new Serilog.Formatting.Json.JsonFormatter());
 });
+
+// Add Clean Architecture Layers
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
 
 // 2. Controllers & JSON Options
 builder.Services.AddControllers()
