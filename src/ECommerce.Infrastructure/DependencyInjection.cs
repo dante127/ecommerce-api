@@ -104,6 +104,28 @@ public static class DependencyInjection
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IInventoryService, InventoryService>();
+
+        // Stripe. Mock mode is resolved once, here, because it depends on the hosting
+        // environment: on by default in Development, never allowed anywhere else.
+        var useMockStripe = configuration.GetValue<bool?>("Stripe:UseMockGateway") ?? isDevelopment;
+        if (useMockStripe && !isDevelopment)
+        {
+            throw new InvalidOperationException(
+                "Stripe:UseMockGateway must not be enabled outside Development. Configure a " +
+                "real Stripe:SecretKey and Stripe:WebhookSecret instead.");
+        }
+
+        if (!useMockStripe &&
+            (string.IsNullOrWhiteSpace(configuration["Stripe:SecretKey"]) ||
+             string.IsNullOrWhiteSpace(configuration["Stripe:WebhookSecret"])))
+        {
+            throw new InvalidOperationException(
+                "Stripe:SecretKey and Stripe:WebhookSecret are required when " +
+                "Stripe:UseMockGateway is disabled. Set Stripe__SecretKey and " +
+                "Stripe__WebhookSecret, or enable Stripe:UseMockGateway in Development.");
+        }
+
+        services.AddSingleton(new StripeGatewayOptions(useMockStripe));
         services.AddScoped<IPaymentGateway, StripePaymentGateway>();
 
         // 6. Background Services
