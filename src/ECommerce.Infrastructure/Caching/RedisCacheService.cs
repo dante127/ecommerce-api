@@ -59,18 +59,6 @@ public sealed class RedisCacheService : ICacheService
         }
     }
 
-    public async Task RemoveAsync(string key, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            await _distributedCache.RemoveAsync(key, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to remove cache key '{Key}' from Redis.", key);
-        }
-    }
-
     public async Task<long> IncrementVersionAsync(string versionKey, CancellationToken cancellationToken = default)
     {
         try

@@ -16,8 +16,3 @@ public sealed record OrderCancelledEvent(Guid OrderId, Guid UserId, string Reaso
 {
     public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
 }
-
-public sealed record ProductStockChangedEvent(Guid ProductId, int NewQuantity) : IDomainEvent
-{
-    public DateTimeOffset OccurredAt { get; } = DateTimeOffset.UtcNow;
-}

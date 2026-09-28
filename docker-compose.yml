@@ -55,29 +55,6 @@ services:
       timeout: 5s
       retries: 5
 
-  seq:
-    image: datalust/seq:latest
-    container_name: ecommerce-seq
-    restart: unless-stopped
-    ports:
-      - "5341:80"
-    environment:
-      - ACCEPT_EULA=Y
-    volumes:
-      - seq_data:/data
-
-  mailpit:
-    image: axllent/mailpit:latest
-    container_name: ecommerce-mailpit
-    restart: unless-stopped
-    ports:
-      - "8025:8025" # Web UI
-      - "1025:1025" # SMTP
-    volumes:
-      - mailpit_data:/data
-
 volumes:
   postgres_data:
   redis_data:
-  seq_data:
-  mailpit_data:

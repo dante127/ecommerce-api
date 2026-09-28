@@ -19,8 +19,8 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .ReadFrom.Services(services)
         .Enrich.FromLogContext()
         .Enrich.WithProperty("Application", "ECommerce.Api")
-        .Enrich.WithProperty("Environment", context.HostingEnvironment.EnvironmentName)
-        .WriteTo.Console(new Serilog.Formatting.Json.JsonFormatter());
+        .Enrich.WithProperty("Environment", context.HostingEnvironment.EnvironmentName);
+    // Console sink + JSON formatter are configured once in appsettings.json (Serilog:WriteTo).
 });
 
 // Add Clean Architecture Layers

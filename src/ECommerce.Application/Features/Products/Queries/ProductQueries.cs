@@ -46,8 +46,6 @@ public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, 
         // 2. Cache Miss: Query Database
         var query = _context.Products
             .AsNoTracking()
-            .Include(p => p.Category)
-            .Include(p => p.Inventory)
             .Where(p => p.IsActive);
 
         if (!string.IsNullOrWhiteSpace(request.Search))

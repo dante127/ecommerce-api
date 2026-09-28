@@ -133,8 +133,8 @@ public sealed class CheckoutCommandHandler : IRequestHandler<CheckoutCommand, Re
             var order = Order.Create(userId.Value, address, now, paymentDeadline, orderItemsData);
             _context.Orders.Add(order);
 
-            // Clear cart
-            _context.CartItems.RemoveRange(cart.Items);
+            // Clear cart: removing the children from the tracked collection deletes them
+            // (required FK with cascade delete), so the explicit RemoveRange is redundant.
             cart.Clear(now);
 
             await _context.SaveChangesAsync(cancellationToken);

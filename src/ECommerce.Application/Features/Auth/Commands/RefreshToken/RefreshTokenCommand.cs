@@ -82,7 +82,7 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
             return Result<AuthResponse>.Success(new AuthResponse(accessToken, newRawToken, 900));
         }
 
-        // rowsUpdated == 0: Analyze failure原因 (Expired, non-existent, or already revoked)
+        // rowsUpdated == 0: Analyze failure reasons (expired, non-existent, or already revoked)
         var tokenRecord = await _context.RefreshTokens
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.TokenHash == incomingHash, cancellationToken);
