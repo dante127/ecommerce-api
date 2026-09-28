@@ -16,7 +16,10 @@ public static class StartupTasks
     {
         using var scope = app.Services.CreateScope();
         var services = scope.ServiceProvider;
-        var logger = services.GetRequiredService<ILogger<WebApplication>>();
+        // A named category, deliberately not ILogger<WebApplication>: that category lives under the
+        // Microsoft namespace, which the appsettings log-level override filters to Warning, so these
+        // startup messages would never be visible.
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
 
         try
         {
