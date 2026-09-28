@@ -1,16 +1,30 @@
 namespace ECommerce.Application.Common.Models;
 
-public sealed record Error(string Code, string Message)
+/// <summary>
+/// Classifies an <see cref="Error"/> so the API layer can choose a status code without
+/// inspecting the error code string.
+/// </summary>
+public enum ErrorType
 {
-    public static readonly Error None = new(string.Empty, string.Empty);
-    public static readonly Error NullValue = new("Error.NullValue", "The specified result value is null.");
+    Validation,
+    NotFound,
+    Conflict,
+    Unauthorized,
+    Forbidden,
+    BadRequest
+}
 
-    public static Error NotFound(string code, string message) => new(code, message);
-    public static Error Validation(string code, string message) => new(code, message);
-    public static Error Conflict(string code, string message) => new(code, message);
-    public static Error Unauthorized(string code, string message) => new(code, message);
-    public static Error Forbidden(string code, string message) => new(code, message);
-    public static Error BadRequest(string code, string message) => new(code, message);
+public sealed record Error(string Code, string Message, ErrorType Type = ErrorType.BadRequest)
+{
+    public static readonly Error None = new(string.Empty, string.Empty, ErrorType.BadRequest);
+    public static readonly Error NullValue = new("Error.NullValue", "The specified result value is null.", ErrorType.Validation);
+
+    public static Error NotFound(string code, string message) => new(code, message, ErrorType.NotFound);
+    public static Error Validation(string code, string message) => new(code, message, ErrorType.Validation);
+    public static Error Conflict(string code, string message) => new(code, message, ErrorType.Conflict);
+    public static Error Unauthorized(string code, string message) => new(code, message, ErrorType.Unauthorized);
+    public static Error Forbidden(string code, string message) => new(code, message, ErrorType.Forbidden);
+    public static Error BadRequest(string code, string message) => new(code, message, ErrorType.BadRequest);
 }
 
 public class Result

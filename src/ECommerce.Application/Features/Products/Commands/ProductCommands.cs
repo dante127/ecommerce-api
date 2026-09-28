@@ -152,8 +152,8 @@ public sealed class UpdateProductCommandHandler : IRequestHandler<UpdateProductC
         product.UpdateDetails(request.Name, request.Description, request.CategoryId, now);
         product.UpdatePrice(request.Price, now);
 
-        // Set original row version to trigger DbUpdateConcurrencyException if modified concurrently
-        _context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Never;
+        // Pin the original row version so a concurrent modification surfaces as
+        // DbUpdateConcurrencyException instead of silently overwriting it.
         _context.Products.Entry(product).Property(p => p.RowVersion).OriginalValue = request.RowVersion;
 
         try

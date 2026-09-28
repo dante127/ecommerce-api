@@ -102,33 +102,14 @@ public sealed class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery
                 Error.Forbidden("Order.Forbidden", "You do not have permission to view this order."));
         }
 
-        var response = new OrderResponse(
-            order.Id,
-            order.UserId,
-            order.Status.ToString(),
-            order.TotalAmount,
-            new AddressDto(
-                order.ShippingAddress.Street,
-                order.ShippingAddress.City,
-                order.ShippingAddress.State,
-                order.ShippingAddress.PostalCode,
-                order.ShippingAddress.Country),
-            order.PaymentDeadline,
-            order.CancellationReason,
-            order.RowVersion,
-            order.CreatedAt,
-            order.Items.Select(i => new OrderItemResponse(
-                i.ProductId,
-                i.ProductName,
-                i.UnitPrice,
-                i.Quantity,
-                i.UnitPrice * i.Quantity)).ToList(),
-            order.Payments.Select(p => new PaymentSummaryResponse(
+        var response = order.ToResponse(order.Payments
+            .Select(p => new PaymentSummaryResponse(
                 p.Id,
                 p.Status.ToString(),
                 p.Amount,
                 p.StripePaymentIntentId,
-                p.CreatedAt)).ToList());
+                p.CreatedAt))
+            .ToList());
 
         return Result<OrderResponse>.Success(response);
     }

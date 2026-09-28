@@ -33,13 +33,15 @@ public abstract class BaseApiController : ControllerBase
 
     private IActionResult MapErrorToProblem(Error error)
     {
-        var statusCode = error.Code switch
+        // The status comes from the error own classification rather than from substring
+        // matching its code, which is what previously turned any code containing "Token" into a 401.
+        var statusCode = error.Type switch
         {
-            var c when c.StartsWith("Validation") => StatusCodes.Status400BadRequest,
-            var c when c.Contains("NotFound") => StatusCodes.Status404NotFound,
-            var c when c.Contains("Conflict") || c.Contains("InsufficientStock") => StatusCodes.Status409Conflict,
-            var c when c.Contains("Unauthorized") || c.Contains("InvalidCredentials") || c.Contains("Token") => StatusCodes.Status401Unauthorized,
-            var c when c.Contains("Forbidden") => StatusCodes.Status403Forbidden,
+            ErrorType.Validation => StatusCodes.Status400BadRequest,
+            ErrorType.NotFound => StatusCodes.Status404NotFound,
+            ErrorType.Conflict => StatusCodes.Status409Conflict,
+            ErrorType.Unauthorized => StatusCodes.Status401Unauthorized,
+            ErrorType.Forbidden => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status400BadRequest
         };
 

@@ -143,28 +143,7 @@ public sealed class CheckoutCommandHandler : IRequestHandler<CheckoutCommand, Re
             // Invalidate Redis catalog cache
             await _cacheService.IncrementVersionAsync("catalog:version", cancellationToken);
 
-            var response = new OrderResponse(
-                order.Id,
-                order.UserId,
-                order.Status.ToString(),
-                order.TotalAmount,
-                new AddressDto(
-                    order.ShippingAddress.Street,
-                    order.ShippingAddress.City,
-                    order.ShippingAddress.State,
-                    order.ShippingAddress.PostalCode,
-                    order.ShippingAddress.Country),
-                order.PaymentDeadline,
-                order.CancellationReason,
-                order.RowVersion,
-                order.CreatedAt,
-                order.Items.Select(i => new OrderItemResponse(
-                    i.ProductId,
-                    i.ProductName,
-                    i.UnitPrice,
-                    i.Quantity,
-                    i.UnitPrice * i.Quantity)).ToList(),
-                Array.Empty<PaymentSummaryResponse>());
+            var response = order.ToResponse(Array.Empty<PaymentSummaryResponse>());
 
             return Result<OrderResponse>.Success(response);
         }
