@@ -8,8 +8,12 @@ namespace ECommerce.Api.Controllers;
 [Route("api/v{version:apiVersion}/[controller]")]
 public abstract class BaseApiController : ControllerBase
 {
-    private ISender? _sender;
-    protected ISender Sender => _sender ??= HttpContext.RequestServices.GetRequiredService<ISender>();
+    protected BaseApiController(ISender sender)
+    {
+        Sender = sender;
+    }
+
+    protected ISender Sender { get; }
 
     protected IActionResult HandleResult<T>(Result<T> result)
     {

@@ -4,6 +4,7 @@ using Asp.Versioning;
 using ECommerce.Application.Common.Interfaces;
 using ECommerce.Application.Features.Payments.Commands;
 using ECommerce.Application.Features.Payments.DTOs;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -20,7 +21,11 @@ public sealed class PaymentsController : BaseApiController
     private readonly IPaymentGateway _paymentGateway;
     private readonly ILogger<PaymentsController> _logger;
 
-    public PaymentsController(IPaymentGateway paymentGateway, ILogger<PaymentsController> logger)
+    public PaymentsController(
+        IPaymentGateway paymentGateway,
+        ILogger<PaymentsController> logger,
+        ISender sender)
+        : base(sender)
     {
         _paymentGateway = paymentGateway;
         _logger = logger;

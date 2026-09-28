@@ -3,6 +3,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace ECommerce.Api.Middleware;
 
@@ -54,6 +55,15 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
                 StatusCodes.Status409Conflict,
                 "ConcurrencyConflict",
                 "The resource was modified by another request. Please refresh and try again.",
+                null),
+
+            // A unique-index violation is a race the application-level duplicate check did
+            // not see (duplicate SKU, category slug, email, or a replayed webhook event).
+            // Mapping it here keeps the answer a 409 Conflict instead of a 500.
+            DbUpdateException { InnerException: PostgresException { SqlState: "23505" } } => (
+                StatusCodes.Status409Conflict,
+                "UniqueConstraintViolation",
+                "The resource already exists.",
                 null),
 
             UnauthorizedAccessException => (

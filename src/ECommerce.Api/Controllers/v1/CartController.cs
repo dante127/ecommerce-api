@@ -2,6 +2,7 @@ using Asp.Versioning;
 using ECommerce.Application.Features.Cart.Commands;
 using ECommerce.Application.Features.Cart.DTOs;
 using ECommerce.Application.Features.Cart.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,6 +12,10 @@ namespace ECommerce.Api.Controllers.v1;
 [Authorize]
 public sealed class CartController : BaseApiController
 {
+    public CartController(ISender sender) : base(sender)
+    {
+    }
+
     [HttpGet]
     [ProducesResponseType(typeof(CartResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]

@@ -5,6 +5,7 @@ using ECommerce.Application.Features.Auth.Commands.Register;
 using ECommerce.Application.Features.Auth.Commands.RevokeToken;
 using ECommerce.Application.Features.Auth.DTOs;
 using ECommerce.Application.Features.Auth.Queries.GetMe;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -14,6 +15,10 @@ namespace ECommerce.Api.Controllers.v1;
 [ApiVersion("1.0")]
 public sealed class AuthController : BaseApiController
 {
+    public AuthController(ISender sender) : base(sender)
+    {
+    }
+
     [HttpPost("register")]
     [EnableRateLimiting("auth-rate-limit")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]

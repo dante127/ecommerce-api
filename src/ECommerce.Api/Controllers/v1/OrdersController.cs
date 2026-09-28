@@ -3,6 +3,7 @@ using ECommerce.Application.Common.Models;
 using ECommerce.Application.Features.Orders.Commands;
 using ECommerce.Application.Features.Orders.DTOs;
 using ECommerce.Application.Features.Orders.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,6 +13,10 @@ namespace ECommerce.Api.Controllers.v1;
 [Authorize]
 public sealed class OrdersController : BaseApiController
 {
+    public OrdersController(ISender sender) : base(sender)
+    {
+    }
+
     [HttpPost]
     [ProducesResponseType(typeof(OrderResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

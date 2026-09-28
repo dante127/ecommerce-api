@@ -2,6 +2,7 @@ using Asp.Versioning;
 using ECommerce.Application.Features.Categories.Commands;
 using ECommerce.Application.Features.Categories.DTOs;
 using ECommerce.Application.Features.Categories.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,6 +11,10 @@ namespace ECommerce.Api.Controllers.v1;
 [ApiVersion("1.0")]
 public sealed class CategoriesController : BaseApiController
 {
+    public CategoriesController(ISender sender) : base(sender)
+    {
+    }
+
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyCollection<CategoryResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetCategories(CancellationToken cancellationToken)

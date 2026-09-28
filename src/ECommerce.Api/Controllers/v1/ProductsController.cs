@@ -3,6 +3,7 @@ using ECommerce.Application.Common.Models;
 using ECommerce.Application.Features.Products.Commands;
 using ECommerce.Application.Features.Products.DTOs;
 using ECommerce.Application.Features.Products.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,6 +12,10 @@ namespace ECommerce.Api.Controllers.v1;
 [ApiVersion("1.0")]
 public sealed class ProductsController : BaseApiController
 {
+    public ProductsController(ISender sender) : base(sender)
+    {
+    }
+
     [HttpGet]
     [ProducesResponseType(typeof(PagedList<ProductResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetProducts(
