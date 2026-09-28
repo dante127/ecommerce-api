@@ -55,8 +55,23 @@ public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, 
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var search = request.Search.Trim().ToLower();
-            query = query.Where(p => p.Name.ToLower().Contains(search) || p.Description.ToLower().Contains(search));
+            // Escape the LIKE wildcards so that searching for a literal percent or
+            // underscore does not turn into a wildcard. PostgreSQL uses backslash as the
+            // escape character by default.
+            var term = request.Search.Trim().ToLowerInvariant()
+                .Replace("\\", "\\\\")
+                .Replace("%", "\\%")
+                .Replace("_", "\\_");
+            var pattern = $"%{term}%";
+
+            // EF.Functions.Like is provider-agnostic (ILike would tie the Application layer to
+            // PostgreSQL) and lowers the column, which is exactly what the functional trigram
+            // indexes created in the AddTrigramSearchIndexes migration can serve. The previous
+            // Contains predicate could not use an index at all, so every uncached search scanned
+            // the whole Products table.
+            query = query.Where(p =>
+                EF.Functions.Like(p.Name.ToLower(), pattern) ||
+                EF.Functions.Like(p.Description.ToLower(), pattern));
         }
 
         if (request.CategoryId.HasValue)

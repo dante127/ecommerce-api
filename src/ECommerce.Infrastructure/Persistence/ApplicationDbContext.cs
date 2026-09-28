@@ -29,6 +29,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     {
         base.OnModelCreating(builder);
 
+        // The trigram indexes declared in ProductConfiguration require this extension.
+        builder.HasPostgresExtension("pg_trgm");
+
         // Apply entity configurations defined in this assembly
         builder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
     }

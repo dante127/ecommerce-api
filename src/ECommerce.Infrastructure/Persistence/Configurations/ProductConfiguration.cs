@@ -46,8 +46,17 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         // Soft delete global query filter
         builder.HasQueryFilter(p => !p.IsDeleted);
 
+        // The catalogue filters on IsDeleted (through the global query filter) and on
+        // IsActive, and supports a price range inside a category, so the index filter
+        // mirrors those predicates instead of IsDeleted alone.
         builder.HasIndex(p => new { p.CategoryId, p.Price })
-            .HasFilter("\"IsDeleted\" = false");
+            .HasFilter("\"IsDeleted\" = false AND \"IsActive\" = true");
+
+        // The trigram indexes that make the catalogue search indexable are functional indexes on
+        // lower(Name) and lower(Description). EF has no fluent API for an index expression, so they
+        // live in the AddTrigramSearchIndexes migration, next to the pg_trgm extension they need.
+        // A leading-wildcard LIKE cannot use a B-tree index, so without them every uncached search
+        // scanned the whole Products table.
 
         builder.HasOne(p => p.Category)
             .WithMany()
