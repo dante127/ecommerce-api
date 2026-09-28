@@ -15,6 +15,7 @@ namespace ECommerce.Api.Controllers.v1;
 public sealed class AuthController : BaseApiController
 {
     [HttpPost("register")]
+    [EnableRateLimiting("auth-rate-limit")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]

@@ -15,7 +15,7 @@ namespace ECommerce.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration, bool isDevelopment = false)
     {
         // 1. PostgreSQL & EF Core
         var connectionString = configuration.GetConnectionString("DefaultConnection")
@@ -46,8 +46,23 @@ public static class DependencyInjection
         .AddDefaultTokenProviders();
 
         // 3. JWT Authentication
-        var jwtKey = configuration["Jwt:Key"]
-            ?? "SuperSecretDevelopmentKeyForECommerceApiTestingOnlyMustBeLongerThan32Bytes!";
+        // Fail fast. The previous fallback meant a deployment that forgot Jwt__Key would
+        // silently sign tokens with a key published in this repository.
+        var jwtKey = configuration["Jwt:Key"];
+        if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32)
+        {
+            throw new InvalidOperationException(
+                "Jwt:Key is missing or shorter than 32 characters. Configure it via Jwt__Key " +
+                "(environment variable or user-secrets) before starting the API.");
+        }
+
+        if (!isDevelopment &&
+            jwtKey == "SuperSecretDevelopmentKeyForECommerceApiTestingOnlyMustBeLongerThan32Bytes!")
+        {
+            throw new InvalidOperationException(
+                "Jwt:Key is still the development placeholder from appsettings.json. Configure a " +
+                "real key via Jwt__Key before running outside Development.");
+        }
         var jwtIssuer = configuration["Jwt:Issuer"] ?? "ECommerceApi";
         var jwtAudience = configuration["Jwt:Audience"] ?? "ECommerceClient";
 

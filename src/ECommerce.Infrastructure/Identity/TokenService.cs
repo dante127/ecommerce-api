@@ -20,7 +20,7 @@ public sealed class TokenService : ITokenService
     public string GenerateAccessToken(Guid userId, string email, IEnumerable<string> roles)
     {
         var key = _configuration["Jwt:Key"]
-            ?? "SuperSecretDevelopmentKeyForECommerceApiTestingOnlyMustBeLongerThan32Bytes!";
+            ?? throw new InvalidOperationException("Jwt:Key is not configured.");
         var issuer = _configuration["Jwt:Issuer"] ?? "ECommerceApi";
         var audience = _configuration["Jwt:Audience"] ?? "ECommerceClient";
         var expiryMinutes = int.TryParse(_configuration["Jwt:ExpiryMinutes"], out var exp) ? exp : 15;

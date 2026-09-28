@@ -25,7 +25,7 @@ builder.Host.UseSerilog((context, services, configuration) =>
 
 // Add Clean Architecture Layers
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 
 // 2. Controllers & JSON Options
 builder.Services.AddControllers()
