@@ -16,7 +16,7 @@ public sealed class Category : AggregateRoot<Guid>
 
     private Category() { }
 
-    public static Category Create(string name, string slug, Guid? parentId = null)
+    public static Category Create(string name, string slug, Guid? parentId, DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("Category name is required.");
@@ -31,7 +31,7 @@ public sealed class Category : AggregateRoot<Guid>
             Slug = slug.Trim().ToLowerInvariant(),
             ParentId = parentId,
             IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = now
         };
     }
 

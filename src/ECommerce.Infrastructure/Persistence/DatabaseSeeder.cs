@@ -12,8 +12,11 @@ public static class DatabaseSeeder
         ApplicationDbContext context,
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<Guid>> roleManager,
-        ILogger logger)
+        ILogger logger,
+        TimeProvider timeProvider)
     {
+        var now = timeProvider.GetUtcNow();
+
         try
         {
             // 1. Seed Roles
@@ -40,7 +43,7 @@ public static class DatabaseSeeder
                     FirstName = "System",
                     LastName = "Administrator",
                     EmailConfirmed = true,
-                    CreatedAt = DateTimeOffset.UtcNow
+                    CreatedAt = now
                 };
 
                 var result = await userManager.CreateAsync(adminUser, "Admin123!#");
@@ -64,7 +67,7 @@ public static class DatabaseSeeder
                     FirstName = "Jane",
                     LastName = "Customer",
                     EmailConfirmed = true,
-                    CreatedAt = DateTimeOffset.UtcNow
+                    CreatedAt = now
                 };
 
                 var result = await userManager.CreateAsync(customerUser, "Customer123!#");
@@ -78,10 +81,9 @@ public static class DatabaseSeeder
             // 4. Seed Categories
             if (!await context.Categories.AnyAsync())
             {
-                var now = DateTimeOffset.UtcNow;
-                var electronics = Category.Create("Electronics", "electronics");
-                var computers = Category.Create("Computers", "computers", electronics.Id);
-                var accessories = Category.Create("Accessories", "accessories", electronics.Id);
+                var electronics = Category.Create("Electronics", "electronics", null, now);
+                var computers = Category.Create("Computers", "computers", electronics.Id, now);
+                var accessories = Category.Create("Accessories", "accessories", electronics.Id, now);
 
                 await context.Categories.AddRangeAsync(electronics, computers, accessories);
                 await context.SaveChangesAsync();

@@ -55,14 +55,14 @@ public sealed class Order : AggregateRoot<Guid>
             if (unitPrice <= 0)
                 throw new DomainException($"Item '{productName}' has invalid unit price: {unitPrice}.");
 
-            order._items.Add(new OrderItem(order.Id, productId, productName, unitPrice, quantity));
+            order._items.Add(new OrderItem(order.Id, productId, productName, unitPrice, quantity, now));
         }
 
         if (!order._items.Any())
             throw new DomainException("Order must contain at least one item.");
 
         order.TotalAmount = order._items.Sum(i => i.UnitPrice * i.Quantity);
-        order.AddDomainEvent(new OrderCreatedEvent(order.Id, order.UserId, order.TotalAmount));
+        order.AddDomainEvent(new OrderCreatedEvent(order.Id, order.UserId, order.TotalAmount, now));
 
         return order;
     }
@@ -74,7 +74,7 @@ public sealed class Order : AggregateRoot<Guid>
 
         Status = OrderStatus.Paid;
         UpdatedAt = now;
-        AddDomainEvent(new OrderPaidEvent(Id, UserId));
+        AddDomainEvent(new OrderPaidEvent(Id, UserId, now));
     }
 
     public void StartProcessing(DateTimeOffset now)
@@ -112,7 +112,7 @@ public sealed class Order : AggregateRoot<Guid>
         Status = OrderStatus.Cancelled;
         CancellationReason = reason;
         UpdatedAt = now;
-        AddDomainEvent(new OrderCancelledEvent(Id, UserId, reason));
+        AddDomainEvent(new OrderCancelledEvent(Id, UserId, reason, now));
     }
 }
 
@@ -128,7 +128,7 @@ public sealed class OrderItem : BaseEntity<Guid>
 
     private OrderItem() { }
 
-    internal OrderItem(Guid orderId, Guid productId, string productName, decimal unitPrice, int quantity)
+    internal OrderItem(Guid orderId, Guid productId, string productName, decimal unitPrice, int quantity, DateTimeOffset now)
     {
         Id = Guid.NewGuid();
         OrderId = orderId;
@@ -136,6 +136,6 @@ public sealed class OrderItem : BaseEntity<Guid>
         ProductName = productName.Trim();
         UnitPrice = unitPrice;
         Quantity = quantity;
-        CreatedAt = DateTimeOffset.UtcNow;
+        CreatedAt = now;
     }
 }

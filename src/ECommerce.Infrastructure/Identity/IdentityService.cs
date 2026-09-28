@@ -9,13 +9,16 @@ public sealed class IdentityService : IIdentityService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<Guid>> _roleManager;
+    private readonly TimeProvider _timeProvider;
 
     public IdentityService(
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole<Guid>> roleManager)
+        RoleManager<IdentityRole<Guid>> roleManager,
+        TimeProvider timeProvider)
     {
         _userManager = userManager;
         _roleManager = roleManager;
+        _timeProvider = timeProvider;
     }
 
     public async Task<Result<Guid>> CreateUserAsync(
@@ -39,7 +42,7 @@ public sealed class IdentityService : IIdentityService
             Email = email.Trim().ToLowerInvariant(),
             FirstName = firstName.Trim(),
             LastName = lastName.Trim(),
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = _timeProvider.GetUtcNow()
         };
 
         var result = await _userManager.CreateAsync(user, password);

@@ -8,7 +8,7 @@ public interface IDomainEvent
 public abstract class BaseEntity<TId>
 {
     public TId Id { get; protected set; } = default!;
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 }
 

@@ -75,9 +75,10 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<CustomWebApplicationFactory>>();
+        var timeProvider = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
         await context.Database.MigrateAsync();
-        await DatabaseSeeder.SeedAsync(context, userManager, roleManager, logger);
+        await DatabaseSeeder.SeedAsync(context, userManager, roleManager, logger, timeProvider);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

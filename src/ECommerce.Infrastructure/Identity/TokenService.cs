@@ -11,10 +11,12 @@ namespace ECommerce.Infrastructure.Identity;
 public sealed class TokenService : ITokenService
 {
     private readonly IConfiguration _configuration;
+    private readonly TimeProvider _timeProvider;
 
-    public TokenService(IConfiguration configuration)
+    public TokenService(IConfiguration configuration, TimeProvider timeProvider)
     {
         _configuration = configuration;
+        _timeProvider = timeProvider;
     }
 
     public string GenerateAccessToken(Guid userId, string email, IEnumerable<string> roles)
@@ -43,7 +45,7 @@ public sealed class TokenService : ITokenService
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddMinutes(expiryMinutes),
+            Expires = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(expiryMinutes),
             Issuer = issuer,
             Audience = audience,
             SigningCredentials = credentials

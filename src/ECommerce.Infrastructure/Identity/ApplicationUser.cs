@@ -6,5 +6,5 @@ public sealed class ApplicationUser : IdentityUser<Guid>
 {
     public string FirstName { get; set; } = null!;
     public string LastName { get; set; } = null!;
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; }
 }

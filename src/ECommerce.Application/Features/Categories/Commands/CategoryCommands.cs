@@ -23,11 +23,16 @@ public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategor
 {
     private readonly IApplicationDbContext _context;
     private readonly ICacheService _cacheService;
+    private readonly TimeProvider _timeProvider;
 
-    public CreateCategoryCommandHandler(IApplicationDbContext context, ICacheService cacheService)
+    public CreateCategoryCommandHandler(
+        IApplicationDbContext context,
+        ICacheService cacheService,
+        TimeProvider timeProvider)
     {
         _context = context;
         _cacheService = cacheService;
+        _timeProvider = timeProvider;
     }
 
     public async Task<Result<CategoryResponse>> Handle(CreateCategoryCommand request, CancellationToken cancellationToken)
@@ -38,7 +43,7 @@ public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategor
             return Result<CategoryResponse>.Failure(Error.Conflict("Category.SlugExists", "A category with this slug already exists."));
         }
 
-        var category = Category.Create(request.Name, request.Slug, request.ParentId);
+        var category = Category.Create(request.Name, request.Slug, request.ParentId, _timeProvider.GetUtcNow());
         await _context.Categories.AddAsync(category, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
