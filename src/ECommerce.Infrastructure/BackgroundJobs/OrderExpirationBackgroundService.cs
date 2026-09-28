@@ -65,9 +65,15 @@ public sealed class OrderExpirationBackgroundService : BackgroundService
 
         var now = timeProvider.GetUtcNow();
 
+        // Oldest deadline first. Without an ORDER BY the selection is arbitrary, so a backlog
+        // larger than the batch size can starve some orders indefinitely.
+        // Concurrent API instances are tolerated: Order.RowVersion (PostgreSQL xmin) makes the
+        // losing writer surface DbUpdateConcurrencyException, which rolls that order back.
         var expiredOrders = await context.Orders
             .Include(o => o.Items)
             .Where(o => o.Status == OrderStatus.Pending && o.PaymentDeadline <= now)
+            .OrderBy(o => o.PaymentDeadline)
+            .ThenBy(o => o.Id)
             .Take(50)
             .ToListAsync(cancellationToken);
 

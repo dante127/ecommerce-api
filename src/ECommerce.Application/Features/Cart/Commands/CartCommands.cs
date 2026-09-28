@@ -80,22 +80,9 @@ public sealed class AddItemToCartCommandHandler : IRequestHandler<AddItemToCartC
         cart.AddItem(request.ProductId, request.Quantity, now);
         await _context.SaveChangesAsync(cancellationToken);
 
-        // Return updated cart
-        var updatedCart = await _context.Carts
-            .Include(c => c.Items)
-                .ThenInclude(i => i.Product)
-            .FirstAsync(c => c.Id == cart.Id, cancellationToken);
-
-        var items = updatedCart.Items
-            .Where(i => i.Product != null && !i.Product.IsDeleted)
-            .Select(i => new CartItemResponse(
-                i.ProductId,
-                i.Product!.Name,
-                i.Product.Sku,
-                i.Product.Price,
-                i.Quantity,
-                i.Product.Price * i.Quantity))
-            .ToList();
+        // Projected straight from the database: no tracked graph re-read, and an explicit
+        // order so the response is deterministic.
+        var items = await _context.LoadPurchasableLinesAsync(cart.Id, cancellationToken);
 
         return Result<CartResponse>.Success(new CartResponse(cart.Id, items, items.Sum(i => i.Subtotal)));
     }
@@ -169,21 +156,7 @@ public sealed class UpdateCartItemCommandHandler : IRequestHandler<UpdateCartIte
         cart.UpdateItemQuantity(request.ProductId, request.Quantity, now);
         await _context.SaveChangesAsync(cancellationToken);
 
-        var updatedCart = await _context.Carts
-            .Include(c => c.Items)
-                .ThenInclude(i => i.Product)
-            .FirstAsync(c => c.Id == cart.Id, cancellationToken);
-
-        var items = updatedCart.Items
-            .Where(i => i.Product != null && !i.Product.IsDeleted)
-            .Select(i => new CartItemResponse(
-                i.ProductId,
-                i.Product!.Name,
-                i.Product.Sku,
-                i.Product.Price,
-                i.Quantity,
-                i.Product.Price * i.Quantity))
-            .ToList();
+        var items = await _context.LoadPurchasableLinesAsync(cart.Id, cancellationToken);
 
         return Result<CartResponse>.Success(new CartResponse(cart.Id, items, items.Sum(i => i.Subtotal)));
     }

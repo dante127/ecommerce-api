@@ -32,9 +32,14 @@ public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, 
 
     public async Task<Result<PagedList<ProductResponse>>> Handle(GetProductsQuery request, CancellationToken cancellationToken)
     {
+        // Paging is normalised before the cache key is built, so equivalent requests (page=0 and
+        // page=1, pageSize=0 and pageSize=20) share one entry instead of two.
+        var page = request.Page > 0 ? request.Page : 1;
+        var pageSize = request.PageSize is > 0 and <= 100 ? request.PageSize : 20;
+
         // 1. Check Redis Cache
         var version = await _cacheService.GetVersionAsync("catalog:version", cancellationToken);
-        var canonicalKey = GenerateCanonicalQueryHash(request);
+        var canonicalKey = GenerateCanonicalQueryHash(request with { Page = page, PageSize = pageSize });
         var cacheKey = $"catalog:v{version}:products:{canonicalKey}";
 
         var cachedResult = await _cacheService.GetAsync<PagedList<ProductResponse>>(cacheKey, cancellationToken);
@@ -79,8 +84,6 @@ public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, 
         };
 
         var totalCount = await query.CountAsync(cancellationToken);
-        var page = request.Page > 0 ? request.Page : 1;
-        var pageSize = request.PageSize is > 0 and <= 100 ? request.PageSize : 20;
 
         var items = await query
             .Skip((page - 1) * pageSize)
@@ -124,11 +127,22 @@ public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, 
 
         var pagedList = new PagedList<ProductResponse>(productResponses, page, pageSize, totalCount);
 
-        // 3. Store in Redis with absolute 5-minute TTL
-        await _cacheService.SetAsync(cacheKey, pagedList, TimeSpan.FromMinutes(5), cancellationToken);
+        // 3. Cache only the bounded set of hot listing shapes. Free-text search and price
+        // ranges produce an unbounded, caller-controlled key space - one entry per arbitrary
+        // permutation - so caching those would let crawler or hostile traffic grow Redis
+        // without limit. Those requests are served straight from the database. See ADR-006.
+        if (IsCacheableShape(request))
+        {
+            await _cacheService.SetAsync(cacheKey, pagedList, TimeSpan.FromMinutes(5), cancellationToken);
+        }
 
         return Result<PagedList<ProductResponse>>.Success(pagedList);
     }
+
+    private static bool IsCacheableShape(GetProductsQuery query)
+        => string.IsNullOrWhiteSpace(query.Search)
+           && !query.MinPrice.HasValue
+           && !query.MaxPrice.HasValue;
 
     private static string GenerateCanonicalQueryHash(GetProductsQuery q)
     {

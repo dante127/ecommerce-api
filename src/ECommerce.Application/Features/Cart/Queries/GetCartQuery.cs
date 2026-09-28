@@ -33,8 +33,6 @@ public sealed class GetCartQueryHandler : IRequestHandler<GetCartQuery, Result<C
 
         var cart = await _context.Carts
             .AsNoTracking()
-            .Include(c => c.Items)
-                .ThenInclude(i => i.Product)
             .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
 
         if (cart == null)
@@ -45,16 +43,8 @@ public sealed class GetCartQueryHandler : IRequestHandler<GetCartQuery, Result<C
                 new CartResponse(Guid.Empty, Array.Empty<CartItemResponse>(), 0m));
         }
 
-        var items = cart.Items
-            .Where(i => i.Product != null && !i.Product.IsDeleted && i.Product.IsActive)
-            .Select(i => new CartItemResponse(
-                i.ProductId,
-                i.Product!.Name,
-                i.Product.Sku,
-                i.Product.Price,
-                i.Quantity,
-                i.Product.Price * i.Quantity))
-            .ToList();
+        // Projected straight from the database rather than from the tracked cart graph.
+        var items = await _context.LoadActiveLinesAsync(cart.Id, cancellationToken);
 
         var totalAmount = items.Sum(i => i.Subtotal);
         var response = new CartResponse(cart.Id, items, totalAmount);
