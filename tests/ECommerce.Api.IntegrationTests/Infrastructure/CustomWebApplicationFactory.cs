@@ -20,6 +20,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
     private PostgreSqlContainer? _dbContainer;
     private RedisContainer? _redisContainer;
     public bool IsContainerReady { get; private set; }
+    public string? ContainerFailureReason { get; private set; }
 
     public async Task InitializeAsync()
     {
@@ -44,8 +45,27 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         catch (Exception ex)
         {
             IsContainerReady = false;
+            ContainerFailureReason = $"{ex.GetType().Name}: {ex.Message}";
             Console.WriteLine($"[Testcontainers] Docker not available: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Fails the calling test when the container dependency is missing. These tests
+    /// exercise real HTTP against PostgreSQL and Redis, so a run without them proves
+    /// nothing and must never be reported as passing.
+    /// </summary>
+    public void RequireContainers()
+    {
+        if (IsContainerReady)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "This integration test requires Docker (Testcontainers PostgreSQL 17 + Redis 7). " +
+            "Start Docker and re-run, or run the unit test projects only. " +
+            $"Container startup failure: {ContainerFailureReason}");
     }
 
     private async Task EnsureDatabaseSeededAsync()

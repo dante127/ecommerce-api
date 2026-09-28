@@ -19,10 +19,7 @@ public class RefreshTokenRotationTests : IClassFixture<CustomWebApplicationFacto
     [Fact]
     public async Task RefreshTokenRotation_WithinGracePeriod_AllowsParallelRequests()
     {
-        if (!_factory.IsContainerReady)
-        {
-            return;
-        }
+        _factory.RequireContainers();
 
         var client = _factory.CreateClient();
         var email = $"refresh_grace_{Guid.NewGuid():N}@test.com";

@@ -25,17 +25,15 @@ public class WebhookIdempotencyTests : IClassFixture<CustomWebApplicationFactory
     [Fact]
     public async Task Webhook_DuplicateEvent_ProcessesIdempotentlyAndReturns200BothTimes()
     {
-        if (!_factory.IsContainerReady)
-        {
-            return;
-        }
+        _factory.RequireContainers();
 
-        var orderId = Guid.NewGuid();
         var sessionId = $"cs_test_webhook_{Guid.NewGuid():N}";
         var eventId = $"evt_test_{Guid.NewGuid():N}";
         var now = DateTimeOffset.UtcNow;
 
-        // 1. Seed Order and Payment
+        // 1. Seed Order and Payment. The id comes from the domain factory: forcing it
+        // through reflection does not work, because Id has a protected setter.
+        Guid orderId;
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -45,8 +43,7 @@ public class WebhookIdempotencyTests : IClassFixture<CustomWebApplicationFactory
                 (Guid.NewGuid(), "Test Product", 50m, 1)
             });
 
-            // Force the order ID to our known orderId
-            typeof(Order).GetProperty("Id")!.SetValue(order, orderId);
+            orderId = order.Id;
 
             var payment = Payment.Create(orderId, sessionId, "https://example.com", 50m, now.AddMinutes(31), now);
 
@@ -74,7 +71,7 @@ public class WebhookIdempotencyTests : IClassFixture<CustomWebApplicationFactory
         var json = JsonSerializer.Serialize(webhookPayload);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        // Set test signature header
+        // The header must be present; in mock Stripe mode its value is not verified.
         client.DefaultRequestHeaders.Remove("Stripe-Signature");
         client.DefaultRequestHeaders.Add("Stripe-Signature", "test_signature");
 

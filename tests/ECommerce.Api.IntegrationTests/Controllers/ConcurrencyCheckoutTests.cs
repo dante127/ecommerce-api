@@ -4,7 +4,6 @@ using ECommerce.Api.IntegrationTests.Infrastructure;
 using ECommerce.Application.Features.Auth.DTOs;
 using ECommerce.Application.Features.Cart.DTOs;
 using ECommerce.Application.Features.Orders.DTOs;
-using ECommerce.Application.Features.Products.DTOs;
 using ECommerce.Domain.Entities;
 using ECommerce.Infrastructure.Persistence;
 using FluentAssertions;
@@ -26,10 +25,7 @@ public class ConcurrencyCheckoutTests : IClassFixture<CustomWebApplicationFactor
     [Fact]
     public async Task ConcurrencyCheckout_WhenTenUsersCheckoutProductWithStockOne_ExactlyOneSucceedsAndNineFailWith409()
     {
-        if (!_factory.IsContainerReady)
-        {
-            return;
-        }
+        _factory.RequireContainers();
 
         // 1. Find product with stock = 1 (TECH-GPU-001)
         using (var scope = _factory.Services.CreateScope())
@@ -40,7 +36,6 @@ public class ConcurrencyCheckoutTests : IClassFixture<CustomWebApplicationFactor
         }
 
         var client = _factory.CreateClient();
-        var productResponse = await client.GetFromJsonAsync<ProductDetailResponse>("/api/v1/products");
 
         // 2. Prepare 10 distinct registered and authenticated users
         const int userCount = 10;

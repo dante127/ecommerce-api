@@ -178,6 +178,8 @@ The API will be available at:
 
 The solution contains **69 automated tests** covering domain invariants, CQRS validation rules, and full HTTP concurrency integration tests.
 
+> `ECommerce.Api.IntegrationTests` requires a running Docker daemon: it starts PostgreSQL 17 and Redis 7 through Testcontainers. If the containers cannot start, those tests fail with an explanatory message instead of passing silently, and CI fails too. To run only the unit tests: `dotnet test tests/ECommerce.Domain.UnitTests` and `dotnet test tests/ECommerce.Application.UnitTests`.
+
 ```bash
 # Run all tests across the solution
 dotnet test

@@ -25,10 +25,7 @@ public class DeterministicCheckoutTests : IClassFixture<CustomWebApplicationFact
     [Fact]
     public async Task ConcurrencyCheckout_WhenTenUsersCheckoutProductWithStockTen_AllTenSucceedAndStockReachesZero()
     {
-        if (!_factory.IsContainerReady)
-        {
-            return;
-        }
+        _factory.RequireContainers();
 
         var client = _factory.CreateClient();
 
