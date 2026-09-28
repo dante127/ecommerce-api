@@ -1,6 +1,5 @@
 using ECommerce.Domain.Common;
 using ECommerce.Domain.Enums;
-using ECommerce.Domain.Events;
 using ECommerce.Domain.Exceptions;
 using ECommerce.Domain.ValueObjects;
 
@@ -62,7 +61,6 @@ public sealed class Order : AggregateRoot<Guid>
             throw new DomainException("Order must contain at least one item.");
 
         order.TotalAmount = order._items.Sum(i => i.UnitPrice * i.Quantity);
-        order.AddDomainEvent(new OrderCreatedEvent(order.Id, order.UserId, order.TotalAmount, now));
 
         return order;
     }
@@ -74,7 +72,6 @@ public sealed class Order : AggregateRoot<Guid>
 
         Status = OrderStatus.Paid;
         UpdatedAt = now;
-        AddDomainEvent(new OrderPaidEvent(Id, UserId, now));
     }
 
     public void StartProcessing(DateTimeOffset now)
@@ -112,7 +109,6 @@ public sealed class Order : AggregateRoot<Guid>
         Status = OrderStatus.Cancelled;
         CancellationReason = reason;
         UpdatedAt = now;
-        AddDomainEvent(new OrderCancelledEvent(Id, UserId, reason, now));
     }
 }
 

@@ -101,6 +101,13 @@ builder.Services.AddSingleton(TimeProvider.System);
 
 var app = builder.Build();
 
+// Apply migrations and seed reference data in Development, or wherever it has been
+// explicitly enabled. Outside Development a deployment should run migrations itself.
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Database:AutoMigrate"))
+{
+    await app.MigrateAndSeedAsync();
+}
+
 // Pipeline Configuration
 app.UseExceptionHandler();
 app.UseForwardedHeaders();

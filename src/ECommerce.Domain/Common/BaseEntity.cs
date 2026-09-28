@@ -1,10 +1,5 @@
 namespace ECommerce.Domain.Common;
 
-public interface IDomainEvent
-{
-    DateTimeOffset OccurredAt { get; }
-}
-
 public abstract class BaseEntity<TId>
 {
     public TId Id { get; protected set; } = default!;
@@ -12,19 +7,11 @@ public abstract class BaseEntity<TId>
     public DateTimeOffset? UpdatedAt { get; set; }
 }
 
+/// <summary>
+/// Marker for aggregate roots. Domain events are deliberately absent: nothing dispatches them, so
+/// collecting them would imply a subscriber that does not exist. ADR-010 introduces the seam
+/// together with the transactional outbox and its first real consumer.
+/// </summary>
 public abstract class AggregateRoot<TId> : BaseEntity<TId>
 {
-    private readonly List<IDomainEvent> _domainEvents = new();
-
-    public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
-
-    public void AddDomainEvent(IDomainEvent domainEvent)
-    {
-        _domainEvents.Add(domainEvent);
-    }
-
-    public void ClearDomainEvents()
-    {
-        _domainEvents.Clear();
-    }
 }

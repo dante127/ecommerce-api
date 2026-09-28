@@ -31,7 +31,6 @@ public class OrderTests
         order.TotalAmount.Should().Be(2150.00m);
         order.Status.Should().Be(OrderStatus.Pending);
         order.Items.Should().HaveCount(2);
-        order.DomainEvents.Should().ContainSingle();
     }
 
     [Fact]

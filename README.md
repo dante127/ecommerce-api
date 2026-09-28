@@ -151,7 +151,8 @@ docker-compose up -d
 # Navigate to the API project
 cd src/ECommerce.Api
 
-# Run application (seeds database automatically on first startup)
+# Run application. In Development it applies EF migrations and seeds reference data on
+# startup; set Database__AutoMigrate=true for the same behaviour elsewhere.
 dotnet run
 ```
 
