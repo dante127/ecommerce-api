@@ -56,11 +56,6 @@ public sealed class AddItemToCartCommandHandler : IRequestHandler<AddItemToCartC
         }
 
         var availableStock = product.Inventory?.Quantity ?? 0;
-        if (availableStock < request.Quantity)
-        {
-            return Result<CartResponse>.Failure(
-                Error.Conflict("Cart.InsufficientStock", $"Requested quantity ({request.Quantity}) exceeds available stock ({availableStock})."));
-        }
 
         var now = _timeProvider.GetUtcNow();
         var cart = await _context.Carts
@@ -71,6 +66,15 @@ public sealed class AddItemToCartCommandHandler : IRequestHandler<AddItemToCartC
         {
             cart = ECommerce.Domain.Entities.Cart.Create(userId, now);
             await _context.Carts.AddAsync(cart, cancellationToken);
+        }
+
+        // Validate the quantity the line WOULD hold, not just the increment: adding to an
+        // existing line must not push it past available stock.
+        var projectedQuantity = cart.ProjectedQuantity(request.ProductId, request.Quantity);
+        if (projectedQuantity > availableStock)
+        {
+            return Result<CartResponse>.Failure(
+                Error.Conflict("Cart.InsufficientStock", $"Requested total quantity ({projectedQuantity}) exceeds available stock ({availableStock})."));
         }
 
         cart.AddItem(request.ProductId, request.Quantity, now);

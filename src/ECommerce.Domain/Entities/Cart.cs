@@ -40,6 +40,16 @@ public sealed class Cart : AggregateRoot<Guid>
         UpdatedAt = now;
     }
 
+    /// <summary>
+    /// Quantity of <paramref name="productId"/> the cart would hold after adding
+    /// <paramref name="additionalQuantity"/> more units.
+    /// </summary>
+    public int ProjectedQuantity(Guid productId, int additionalQuantity)
+    {
+        var existingQuantity = _items.FirstOrDefault(i => i.ProductId == productId)?.Quantity ?? 0;
+        return existingQuantity + additionalQuantity;
+    }
+
     public void UpdateItemQuantity(Guid productId, int quantity, DateTimeOffset now)
     {
         var existingItem = _items.FirstOrDefault(i => i.ProductId == productId);

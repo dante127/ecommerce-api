@@ -86,10 +86,10 @@ public sealed class CheckoutCommandHandler : IRequestHandler<CheckoutCommand, Re
                 Error.BadRequest("Checkout.EmptyCart", "Cannot checkout with an empty cart."));
         }
 
-        // Validate that all products exist and are active
+        // Validate that all products still exist and can be purchased
         foreach (var item in cart.Items)
         {
-            if (item.Product == null || item.Product.IsDeleted)
+            if (item.Product == null || item.Product.IsDeleted || !item.Product.IsActive)
             {
                 return Result<OrderResponse>.Failure(
                     Error.BadRequest("Checkout.ProductUnavailable", $"Product '{item.ProductId}' is no longer available."));

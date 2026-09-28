@@ -115,4 +115,20 @@ public class CartTests
         // Assert
         cart.Items.Should().BeEmpty();
     }
+
+    [Fact]
+    public void Cart_ProjectedQuantity_IncludesQuantityAlreadyInTheCart()
+    {
+        // Arrange
+        var cart = Cart.Create(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var productId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        cart.AddItem(productId, 5, now);
+
+        // Act + Assert
+        // Regression guard: the add-to-cart check must consider existing + incoming,
+        // not the incoming quantity alone.
+        cart.ProjectedQuantity(productId, 2).Should().Be(7);
+        cart.ProjectedQuantity(Guid.NewGuid(), 2).Should().Be(2);
+    }
 }

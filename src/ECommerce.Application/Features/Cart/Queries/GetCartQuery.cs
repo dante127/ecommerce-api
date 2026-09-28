@@ -13,16 +13,13 @@ public sealed class GetCartQueryHandler : IRequestHandler<GetCartQuery, Result<C
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
-    private readonly TimeProvider _timeProvider;
 
     public GetCartQueryHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService,
-        TimeProvider timeProvider)
+        ICurrentUserService currentUserService)
     {
         _context = context;
         _currentUserService = currentUserService;
-        _timeProvider = timeProvider;
     }
 
     public async Task<Result<CartResponse>> Handle(GetCartQuery request, CancellationToken cancellationToken)
@@ -35,16 +32,17 @@ public sealed class GetCartQueryHandler : IRequestHandler<GetCartQuery, Result<C
         var userId = _currentUserService.UserId.Value;
 
         var cart = await _context.Carts
+            .AsNoTracking()
             .Include(c => c.Items)
                 .ThenInclude(i => i.Product)
             .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
 
         if (cart == null)
         {
-            var now = _timeProvider.GetUtcNow();
-            cart = ECommerce.Domain.Entities.Cart.Create(userId, now);
-            await _context.Carts.AddAsync(cart, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
+            // A GET must not mutate state, so no cart row is created here. The cart is
+            // created by the first cart write; an empty projection is returned instead.
+            return Result<CartResponse>.Success(
+                new CartResponse(Guid.Empty, Array.Empty<CartItemResponse>(), 0m));
         }
 
         var items = cart.Items
