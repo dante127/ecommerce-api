@@ -22,6 +22,11 @@ public sealed class RefreshTokenCommandValidator : AbstractValidator<RefreshToke
 
 public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, Result<AuthResponse>>
 {
+    /// <summary>Concurrent refreshes inside this window are treated as a client race, not as reuse.</summary>
+    private static readonly TimeSpan GraceWindow = TimeSpan.FromSeconds(10);
+
+    private const int AccessTokenLifetimeSeconds = 900;
+
     private readonly IApplicationDbContext _context;
     private readonly ITokenService _tokenService;
     private readonly IIdentityService _identityService;
@@ -50,7 +55,12 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
         var newHashedToken = _tokenService.HashToken(newRawToken);
         var newExpiry = now.AddDays(7);
 
-        // Atomic rotation update
+        // One transaction covers the revoke and the replacement insert, so a failure can no
+        // longer leave the caller holding a revoked token with no replacement.
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+        // Atomic claim: only a token that is still active can be rotated, so exactly one
+        // concurrent caller wins the rotation.
         var rowsUpdated = await _context.RefreshTokens
             .Where(t => t.TokenHash == incomingHash && t.RevokedAt == null && t.ExpiresAt > now)
             .ExecuteUpdateAsync(s => s
@@ -58,65 +68,95 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
                 .SetProperty(t => t.ReplacedByTokenHash, newHashedToken)
                 .SetProperty(t => t.UpdatedAt, now), cancellationToken);
 
+        Guid ownerId;
+
         if (rowsUpdated == 1)
         {
-            var existingToken = await _context.RefreshTokens
+            var rotated = await _context.RefreshTokens
                 .AsNoTracking()
                 .FirstAsync(t => t.TokenHash == incomingHash, cancellationToken);
 
-            var newTokenEntity = ECommerce.Domain.Entities.RefreshToken.Create(existingToken.UserId, newHashedToken, newExpiry, now);
-            await _context.RefreshTokens.AddAsync(newTokenEntity, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
+            ownerId = rotated.UserId;
+        }
+        else
+        {
+            // rowsUpdated == 0: the presented token is unknown, expired, or already revoked.
+            var tokenRecord = await _context.RefreshTokens
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.TokenHash == incomingHash, cancellationToken);
 
-            var userResult = await _identityService.GetUserByIdAsync(existingToken.UserId, cancellationToken);
-            if (userResult.IsFailure)
+            if (tokenRecord == null || tokenRecord.ExpiresAt <= now)
             {
-                return Result<AuthResponse>.Failure(userResult.Error);
+                return Result<AuthResponse>.Failure(
+                    Error.Unauthorized("Auth.InvalidToken", "Invalid or expired refresh token."));
             }
 
-            var accessToken = _tokenService.GenerateAccessToken(
-                userResult.Value.Id,
-                userResult.Value.Email,
-                userResult.Value.Roles);
-
-            return Result<AuthResponse>.Success(new AuthResponse(accessToken, newRawToken, 900));
-        }
-
-        // rowsUpdated == 0: Analyze failure reasons (expired, non-existent, or already revoked)
-        var tokenRecord = await _context.RefreshTokens
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.TokenHash == incomingHash, cancellationToken);
-
-        if (tokenRecord == null || tokenRecord.ExpiresAt <= now)
-        {
-            return Result<AuthResponse>.Failure(
-                Error.Unauthorized("Auth.InvalidToken", "Invalid or expired refresh token."));
-        }
-
-        if (tokenRecord.RevokedAt.HasValue)
-        {
-            var timeSinceRevocation = now - tokenRecord.RevokedAt.Value;
-            if (timeSinceRevocation < TimeSpan.FromSeconds(10))
+            if (!tokenRecord.RevokedAt.HasValue)
             {
-                // Benign race condition within 10-second grace window (e.g. concurrent browser tabs)
-                _logger.LogInformation(
-                    "Refresh token rotation race observed within grace window ({Elapsed}s) for user {UserId}",
-                    timeSinceRevocation.TotalSeconds, tokenRecord.UserId);
+                return Result<AuthResponse>.Failure(
+                    Error.Unauthorized("Auth.InvalidToken", "Invalid refresh token."));
+            }
+
+            var timeSinceRevocation = now - tokenRecord.RevokedAt.Value;
+
+            if (timeSinceRevocation >= GraceWindow)
+            {
+                // Beyond the window this is treated as genuine reuse.
+                _logger.LogWarning(
+                    "Suspicious refresh token reuse detected for user {UserId}. Revoked {ElapsedSeconds}s ago.",
+                    tokenRecord.UserId, timeSinceRevocation.TotalSeconds);
 
                 return Result<AuthResponse>.Failure(
-                    Error.Unauthorized("Auth.TokenAlreadyRefreshed", "Token was recently rotated. Please use the newly issued token."));
+                    Error.Unauthorized("Auth.TokenReused", "Suspicious token reuse detected. Session invalid."));
             }
 
-            // Suspicious reuse detected beyond 10-second grace window
-            _logger.LogWarning(
-                "Suspicious refresh token reuse detected for user {UserId}. Revoked {Elapsed}s ago.",
-                tokenRecord.UserId, timeSinceRevocation.TotalSeconds);
+            // Concurrent request from another tab, or a retry after a dropped response. The first
+            // child token cannot be replayed because only its hash is persisted, so issue an
+            // additional child of the same parent instead of logging the caller out (ADR-008).
+            _logger.LogInformation(
+                "Refresh token rotation race inside the {GraceSeconds}s grace window for user {UserId}; issuing a parallel child token.",
+                GraceWindow.TotalSeconds, tokenRecord.UserId);
 
-            return Result<AuthResponse>.Failure(
-                Error.Unauthorized("Auth.TokenReused", "Suspicious token reuse detected. Session invalid."));
+            ownerId = tokenRecord.UserId;
         }
 
-        return Result<AuthResponse>.Failure(
-            Error.Unauthorized("Auth.InvalidToken", "Invalid refresh token."));
+        var replacement = ECommerce.Domain.Entities.RefreshToken.Create(
+            ownerId,
+            newHashedToken,
+            newExpiry,
+            now);
+
+        await _context.RefreshTokens.AddAsync(replacement, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var newTokens = await IssueNewTokensAsync(ownerId, newRawToken, cancellationToken);
+        if (newTokens.IsFailure)
+        {
+            // Nothing is committed, so the caller keeps the token it presented.
+            return newTokens;
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return newTokens;
+    }
+
+    private async Task<Result<AuthResponse>> IssueNewTokensAsync(
+        Guid userId,
+        string rawRefreshToken,
+        CancellationToken cancellationToken)
+    {
+        var userResult = await _identityService.GetUserByIdAsync(userId, cancellationToken);
+        if (userResult.IsFailure)
+        {
+            return Result<AuthResponse>.Failure(userResult.Error);
+        }
+
+        var accessToken = _tokenService.GenerateAccessToken(
+            userResult.Value.Id,
+            userResult.Value.Email,
+            userResult.Value.Roles);
+
+        return Result<AuthResponse>.Success(
+            new AuthResponse(accessToken, rawRefreshToken, AccessTokenLifetimeSeconds));
     }
 }
