@@ -69,6 +69,7 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
                 .SetProperty(t => t.UpdatedAt, now), cancellationToken);
 
         Guid ownerId;
+        Guid ownerFamilyId;
 
         if (rowsUpdated == 1)
         {
@@ -77,6 +78,7 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
                 .FirstAsync(t => t.TokenHash == incomingHash, cancellationToken);
 
             ownerId = rotated.UserId;
+            ownerFamilyId = rotated.FamilyId;
         }
         else
         {
@@ -99,12 +101,29 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
 
             var timeSinceRevocation = now - tokenRecord.RevokedAt.Value;
 
-            if (timeSinceRevocation >= GraceWindow)
+            // The grace window only covers a token that was revoked by its own rotation, which
+            // is what leaves ReplacedByTokenHash set. A token revoked because its family was
+            // compromised has no replacement link, so it can never be used to resurrect that
+            // family through this path.
+            if (timeSinceRevocation >= GraceWindow || string.IsNullOrEmpty(tokenRecord.ReplacedByTokenHash))
             {
-                // Beyond the window this is treated as genuine reuse.
+                // Reuse of a rotated token revokes the entire family: the legitimate holder
+                // already has a replacement, and a thief may hold any descendant. Clearing the
+                // lineage links is what keeps these tokens out of the grace path above.
+                var familyId = tokenRecord.FamilyId;
+                var revokedCount = await _context.RefreshTokens
+                    .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(t => t.RevokedAt, now)
+                        .SetProperty(t => t.ReplacedByTokenHash, (string?)null)
+                        .SetProperty(t => t.UpdatedAt, now), cancellationToken);
+
                 _logger.LogWarning(
-                    "Suspicious refresh token reuse detected for user {UserId}. Revoked {ElapsedSeconds}s ago.",
-                    tokenRecord.UserId, timeSinceRevocation.TotalSeconds);
+                    "Reuse of a rotated refresh token for user {UserId} ({ElapsedSeconds}s after revocation); revoked {RevokedCount} token(s) in family {FamilyId}.",
+                    tokenRecord.UserId, timeSinceRevocation.TotalSeconds, revokedCount, familyId);
+
+                // This revocation must survive the failure response, so it is committed.
+                await transaction.CommitAsync(cancellationToken);
 
                 return Result<AuthResponse>.Failure(
                     Error.Unauthorized("Auth.TokenReused", "Suspicious token reuse detected. Session invalid."));
@@ -118,10 +137,12 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
                 GraceWindow.TotalSeconds, tokenRecord.UserId);
 
             ownerId = tokenRecord.UserId;
+            ownerFamilyId = tokenRecord.FamilyId;
         }
 
         var replacement = ECommerce.Domain.Entities.RefreshToken.Create(
             ownerId,
+            ownerFamilyId,
             newHashedToken,
             newExpiry,
             now);

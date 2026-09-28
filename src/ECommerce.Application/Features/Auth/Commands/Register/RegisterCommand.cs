@@ -85,7 +85,13 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
         var now = _timeProvider.GetUtcNow();
         var expiresAt = now.AddDays(7);
 
-        var refreshTokenEntity = ECommerce.Domain.Entities.RefreshToken.Create(userId, hashedRefreshToken, expiresAt, now);
+        // A new sign-in starts a new token family.
+        var refreshTokenEntity = ECommerce.Domain.Entities.RefreshToken.Create(
+            userId,
+            Guid.NewGuid(),
+            hashedRefreshToken,
+            expiresAt,
+            now);
         await _context.RefreshTokens.AddAsync(refreshTokenEntity, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 

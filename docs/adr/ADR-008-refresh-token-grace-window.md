@@ -9,7 +9,7 @@ Refresh tokens are stored as SHA-256 hashes only, so a raw token value can never
 1. Rotation is a single conditional `UPDATE` (`WHERE TokenHash = @hash AND RevokedAt IS NULL AND ExpiresAt > now`), so exactly one concurrent caller can claim a token. The revoke and the replacement insert run inside **one database transaction**, which begins before the claim.
 2. On a successful rotation, the presented token is marked revoked with `RevokedAt = now` and `ReplacedByTokenHash = <new token hash>`, and a replacement row is inserted in the same transaction.
 3. If the presented token was revoked **less than 10 seconds ago**, the request is treated as a concurrent client request: the API issues an additional child token for the same user and returns it, instead of failing the caller. The first child's raw value is not returned, because only its hash is persisted.
-4. If the presented token was revoked **longer than 10 seconds ago**, the request is treated as reuse: it is rejected with `Auth.TokenReused` and logged at Warning.
+4. The grace window covers only a token that was revoked by its own rotation, which is what leaves `ReplacedByTokenHash` set. Any other revoked token, or one revoked longer than 10 seconds ago, is treated as reuse: the request is rejected with `Auth.TokenReused` and **every still-active token in that family is revoked** in the same transaction.
 5. A token that is unknown or already expired is rejected with `Auth.InvalidToken`.
 
 ## Consequences & Trade-offs
@@ -17,5 +17,5 @@ Refresh tokens are stored as SHA-256 hashes only, so a raw token value can never
 - **Positive**: because the revoke and the insert share a transaction, a failure can no longer leave a user with a revoked token and no replacement.
 - **Negative**: adds 10 seconds of tolerance during which a compromised token could be used in parallel with the legitimate user before reuse detection takes effect.
 - **Negative / known gap**: within the grace window more than one child token can be issued for the same parent, and that fan-out is bounded only by the 10-second window; it is not capped per parent.
-- **Known gap**: step 4 detects reuse but does **not** revoke the remaining token lineage. Full family revocation needs a lineage or family identifier persisted on `RefreshTokens`; the current schema only links parent to child through `ReplacedByTokenHash`, so this is deferred.
+- Reuse detection revokes the **entire family**: every token descended from one sign-in is revoked and its lineage links are cleared, so a token revoked this way can never re-enter the grace path. Each sign-in starts a new family (`RefreshTokens.FamilyId`), and rotation passes the family on to the child.
 - Revocation of the parent and insertion of the child go through `ExecuteUpdateAsync` and `SaveChangesAsync` respectively, both inside the same explicit transaction.

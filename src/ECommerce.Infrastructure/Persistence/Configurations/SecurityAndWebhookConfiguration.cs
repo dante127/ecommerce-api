@@ -15,6 +15,12 @@ public sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refresh
         builder.Property(t => t.UserId)
             .IsRequired();
 
+        builder.Property(t => t.FamilyId)
+            .IsRequired();
+
+        // Family revocation matches every token descended from one login.
+        builder.HasIndex(t => t.FamilyId);
+
         builder.Property(t => t.TokenHash)
             .IsRequired()
             .HasMaxLength(128);
