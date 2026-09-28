@@ -181,6 +181,36 @@ The solution contains **69 automated tests** covering domain invariants, CQRS va
 
 > `ECommerce.Api.IntegrationTests` requires a running Docker daemon: it starts PostgreSQL 17 and Redis 7 through Testcontainers. If the containers cannot start, those tests fail with an explanatory message instead of passing silently, and CI fails too. To run only the unit tests: `dotnet test tests/ECommerce.Domain.UnitTests` and `dotnet test tests/ECommerce.Application.UnitTests`.
 
+## Deployment
+
+The image is built from the `Dockerfile` (multi-stage build, non-root runtime user). The application deliberately refuses to start with missing secrets rather than running with unsafe defaults, so the settings below are required before it will serve traffic.
+
+| Setting | Why it is required |
+|---|---|
+| `Jwt__Key` | At least 32 characters. Startup fails without it, and the development placeholder is rejected outside Development. |
+| `Stripe__SecretKey`, `Stripe__WebhookSecret` | Required whenever `Stripe:UseMockGateway` is not enabled. Mock mode is Development-only and throws everywhere else. |
+| `ConnectionStrings__DefaultConnection` | PostgreSQL. The committed value assumes a local server. |
+| `ConnectionStrings__Redis` | Redis. |
+| `ASPNETCORE_ENVIRONMENT` | `Production`. This is what disables the mock Stripe gateway and the placeholder JWT key. |
+
+Then, once per environment:
+
+```bash
+# Apply the migrations and seed reference data (roles, the demo accounts, the catalogue).
+# Outside Development the application does not migrate on startup, so do it explicitly.
+dotnet ef database update --project src/ECommerce.Infrastructure --startup-project src/ECommerce.Api
+# ...or let the first boot do both with: Database__AutoMigrate=true
+```
+
+> **Seed the roles.** `DatabaseSeeder` creates `Admin` and `Customer`. Registration assigns a role
+> on sign-up and fails loudly with `Auth.RoleAssignmentFailed` when the role is missing, so a
+> database without seeded roles cannot accept registrations at all.
+>
+> Design-time commands (`dotnet ef ...`) build the host, which runs the configuration guards. Set
+> `ASPNETCORE_ENVIRONMENT=Development` for them, or provide a real `Jwt__Key`.
+
+Health probes: `/health/live` (process) and `/health/ready` (PostgreSQL and Redis). TLS is expected to be terminated by a proxy or ingress; forwarded headers are already configured.
+
 ```bash
 # Run all tests across the solution
 dotnet test

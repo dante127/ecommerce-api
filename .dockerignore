@@ -1,0 +1,15 @@
+# Keep the image build context clean.
+#
+# A CI checkout contains none of these, so excluding them also makes a local build equivalent to
+# the CI one. Shipping Windows obj/ output into a Linux build stage is the specific hazard here.
+.git/
+.gitignore
+.github/
+docs/
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/*.user
+**/*.suo
+**/*.log
