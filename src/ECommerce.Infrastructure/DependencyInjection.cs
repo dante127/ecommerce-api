@@ -6,8 +6,10 @@ using ECommerce.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
 
@@ -94,12 +96,25 @@ public static class DependencyInjection
 
         // 4. Redis Caching
         var redisConnection = configuration.GetConnectionString("Redis") ?? "localhost:6379";
-        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnection));
+        var redisOptions = ConfigurationOptions.Parse(redisConnection);
+        // A Redis outage must not stop the host from starting, and must not throw on the first
+        // request either: the multiplexer keeps reconnecting in the background while the cache
+        // service treats a failure as a cache miss.
+        redisOptions.AbortOnConnectFail = false;
+        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisOptions));
+
+        // The distributed cache shares that single multiplexer instead of opening a second
+        // connection of its own.
         services.AddStackExchangeRedisCache(options =>
         {
-            options.Configuration = redisConnection;
             options.InstanceName = "ECommerce_";
         });
+        services.AddOptions<RedisCacheOptions>()
+            .Configure<IServiceProvider>((options, serviceProvider) =>
+            {
+                options.ConnectionMultiplexerFactory =
+                    () => Task.FromResult(serviceProvider.GetRequiredService<IConnectionMultiplexer>());
+            });
         services.AddScoped<ICacheService, Caching.RedisCacheService>();
 
         // 5. Identity & Context Services
