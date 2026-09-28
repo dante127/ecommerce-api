@@ -1,12 +1,20 @@
-using ECommerce.Application.Common.Models;
 using FluentValidation;
 using MediatR;
 
 namespace ECommerce.Application.Common.Behaviors;
 
+/// <summary>
+/// Runs the registered validators before the handler. Failures are thrown as a ValidationException,
+/// FluentValidations own MediatR idiom, which hands them to GlobalExceptionHandler and lets the API
+/// render one ProblemDetails extension per invalid field.
+/// </summary>
+/// <remarks>
+/// The previous implementation built a Result failure by reflecting over a static Failure method
+/// and joined every message into a single string, so a client could not tell which field was
+/// rejected.
+/// </remarks>
 public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
     where TRequest : IRequest<TResponse>
-    where TResponse : Result
 {
     private readonly IEnumerable<IValidator<TRequest>> _validators;
 
@@ -27,29 +35,17 @@ public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<
 
         var context = new ValidationContext<TRequest>(request);
 
-        var validationFailures = await Task.WhenAll(
+        var validationResults = await Task.WhenAll(
             _validators.Select(validator => validator.ValidateAsync(context, cancellationToken)));
 
-        var errors = validationFailures
+        var failures = validationResults
             .SelectMany(result => result.Errors)
-            .Where(f => f != null)
+            .Where(failure => failure is not null)
             .ToList();
 
-        if (errors.Any())
+        if (failures.Count > 0)
         {
-            var errorMessage = string.Join("; ", errors.Select(e => e.ErrorMessage));
-            var error = Error.Validation("Validation.General", errorMessage);
-
-            if (typeof(TResponse).IsGenericType &&
-                typeof(TResponse).GetGenericTypeDefinition() == typeof(Result<>))
-            {
-                var failureMethod = typeof(TResponse)
-                    .GetMethod("Failure", new[] { typeof(Error) });
-
-                return (TResponse)failureMethod!.Invoke(null, new object[] { error })!;
-            }
-
-            return (TResponse)Result.Failure(error);
+            throw new ValidationException(failures);
         }
 
         return await next();

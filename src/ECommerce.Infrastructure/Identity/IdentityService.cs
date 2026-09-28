@@ -8,16 +8,16 @@ namespace ECommerce.Infrastructure.Identity;
 public sealed class IdentityService : IIdentityService
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly RoleManager<IdentityRole<Guid>> _roleManager;
+    private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly TimeProvider _timeProvider;
 
     public IdentityService(
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole<Guid>> roleManager,
+        SignInManager<ApplicationUser> signInManager,
         TimeProvider timeProvider)
     {
         _userManager = userManager;
-        _roleManager = roleManager;
+        _signInManager = signInManager;
         _timeProvider = timeProvider;
     }
 
@@ -52,12 +52,18 @@ public sealed class IdentityService : IIdentityService
             return Result<Guid>.Failure(Error.Validation("Auth.RegistrationFailed", errors));
         }
 
-        if (!await _roleManager.RoleExistsAsync(role))
+        // Roles are reference data and belong in the seeder (DatabaseSeeder creates Admin and
+        // Customer) rather than being created lazily inside a registration request. A failed
+        // assignment is now reported instead of ignored, which previously produced accounts
+        // with no role at all and no error anywhere.
+        var roleResult = await _userManager.AddToRoleAsync(user, role);
+        if (!roleResult.Succeeded)
         {
-            await _roleManager.CreateAsync(new IdentityRole<Guid> { Name = role, NormalizedName = role.ToUpperInvariant() });
+            // Do not leave a half-registered account behind.
+            await _userManager.DeleteAsync(user);
+            var roleErrors = string.Join("; ", roleResult.Errors.Select(e => e.Description));
+            return Result<Guid>.Failure(Error.Validation("Auth.RoleAssignmentFailed", roleErrors));
         }
-
-        await _userManager.AddToRoleAsync(user, role);
 
         return Result<Guid>.Success(user.Id);
     }
@@ -74,21 +80,21 @@ public sealed class IdentityService : IIdentityService
                 Error.Unauthorized("Auth.InvalidCredentials", "Invalid email or password."));
         }
 
-        if (await _userManager.IsLockedOutAsync(user))
+        // SignInManager performs the lockout check, the password check and the failed-attempt
+        // bookkeeping as a single operation instead of the three racing calls it replaced.
+        var signInResult = await _signInManager.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true);
+
+        if (signInResult.IsLockedOut)
         {
             return Result<(Guid, string, List<string>)>.Failure(
                 Error.Unauthorized("Auth.AccountLocked", "Account is temporarily locked out. Try again later."));
         }
 
-        var isPasswordValid = await _userManager.CheckPasswordAsync(user, password);
-        if (!isPasswordValid)
+        if (!signInResult.Succeeded)
         {
-            await _userManager.AccessFailedAsync(user);
             return Result<(Guid, string, List<string>)>.Failure(
                 Error.Unauthorized("Auth.InvalidCredentials", "Invalid email or password."));
         }
-
-        await _userManager.ResetAccessFailedCountAsync(user);
 
         var roles = (await _userManager.GetRolesAsync(user)).ToList();
         return Result<(Guid, string, List<string>)>.Success((user.Id, user.Email!, roles));
