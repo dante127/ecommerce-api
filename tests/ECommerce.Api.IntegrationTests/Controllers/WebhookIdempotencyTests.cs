@@ -38,9 +38,11 @@ public class WebhookIdempotencyTests : IClassFixture<CustomWebApplicationFactory
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var address = new Address("Street 1", "City", "State", "12345", "Country");
+            // OrderItems carries a foreign key to Products, so the line must reference a real product.
+            var product = await db.Products.AsNoTracking().FirstAsync();
             var order = Order.Create(Guid.NewGuid(), address, now, now.AddMinutes(35), new[]
             {
-                (Guid.NewGuid(), "Test Product", 50m, 1)
+                (product.Id, product.Name, product.Price, 1)
             });
 
             orderId = order.Id;

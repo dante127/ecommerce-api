@@ -86,6 +86,9 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         {
             builder.UseSetting("ConnectionStrings:DefaultConnection", _dbContainer.GetConnectionString());
             builder.UseSetting("ConnectionStrings:Redis", _redisContainer.GetConnectionString());
+            // The concurrency tests register ten users from a single address, so the auth
+            // rate limit has to be raised for the test host.
+            builder.UseSetting("RateLimiting:Auth:PermitLimit", "10000");
             builder.UseSetting("Stripe:SecretKey", "sk_test_placeholder");
             builder.UseSetting("Stripe:WebhookSecret", "whsec_placeholder");
         }

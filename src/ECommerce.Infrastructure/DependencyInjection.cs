@@ -25,7 +25,11 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString, npgsqlOptions =>
             {
                 npgsqlOptions.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName);
-                npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 3);
+                // Deliberately NOT EnableRetryOnFailure: a retrying execution strategy throws
+                // "does not support user-initiated transactions" for every BeginTransactionAsync
+                // caller (checkout, order cancellation and refresh-token rotation), and wrapping
+                // those units in the strategy would re-run the whole transaction on a late
+                // failure, risking a double reservation. Explicit transaction boundaries win.
             }));
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
