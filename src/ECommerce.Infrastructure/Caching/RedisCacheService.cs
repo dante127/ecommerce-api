@@ -86,12 +86,15 @@ public sealed class RedisCacheService : ICacheService
                 return version;
             }
 
-            return 1;
+            // A missing counter reports 0, NOT 1: the first invalidation INCRs the counter to 1,
+            // and that must differ from the value reads used before any invalidation, otherwise
+            // the first-ever cache invalidation would leave the pre-existing entries valid.
+            return 0;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get version for cache key '{Key}'. Defaulting to 1.", versionKey);
-            return 1;
+            _logger.LogWarning(ex, "Failed to get version for cache key '{Key}'. Defaulting to 0.", versionKey);
+            return 0;
         }
     }
 }

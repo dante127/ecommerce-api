@@ -33,12 +33,18 @@ public sealed class CorrelationIdMiddleware
 
     private static string GetOrCreateCorrelationId(HttpContext context)
     {
+        // A client-supplied id is echoed into response headers and every log line on the request,
+        // so it must be bounded and printable before it is trusted anywhere.
         if (context.Request.Headers.TryGetValue(CorrelationIdHeaderName, out var headerValue) &&
-            !string.IsNullOrWhiteSpace(headerValue))
+            IsValidCorrelationId(headerValue.ToString()))
         {
             return headerValue.ToString();
         }
 
         return Guid.NewGuid().ToString("D");
     }
+
+    private static bool IsValidCorrelationId(string value) =>
+        value.Length <= 128 &&
+        value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.');
 }

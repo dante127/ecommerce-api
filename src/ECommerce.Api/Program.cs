@@ -11,6 +11,7 @@ using Serilog;
 
 // System.Net supplies IPAddress/IPNetwork for the forwarded-header trust list below.
 using System.Net;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -125,14 +126,19 @@ builder.Services.AddRateLimiter(options =>
 });
 
 // 8. Health Checks
-var postgresConnection = builder.Configuration.GetConnectionString("DefaultConnection") 
-    ?? "Host=localhost;Port=5432;Database=ecommerce;Username=postgres;Password=postgres";
-var redisConnection = builder.Configuration.GetConnectionString("Redis") 
-    ?? "localhost:6379";
-
+// Bounded timeouts so a hung database or Redis cannot stall readiness probes. Redis probes reuse
+// the cache's shared multiplexer instead of opening a second connection.
 builder.Services.AddHealthChecks()
-    .AddNpgSql(postgresConnection, name: "postgresql", tags: new[] { "ready" })
-    .AddRedis(redisConnection, name: "redis", tags: new[] { "ready" });
+    .AddNpgSql(
+        AppConnectionStrings.GetPostgres(builder.Configuration),
+        name: "postgresql",
+        tags: new[] { "ready" },
+        timeout: TimeSpan.FromSeconds(5))
+    .AddRedis(
+        serviceProvider => serviceProvider.GetRequiredService<IConnectionMultiplexer>(),
+        name: "redis",
+        tags: new[] { "ready" },
+        timeout: TimeSpan.FromSeconds(5));
 
 // 9. TimeProvider (built-in .NET 10)
 builder.Services.AddSingleton(TimeProvider.System);

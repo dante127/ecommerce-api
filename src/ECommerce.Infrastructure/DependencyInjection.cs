@@ -21,8 +21,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration, bool isDevelopment = false)
     {
         // 1. PostgreSQL & EF Core
-        var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Host=localhost;Port=5432;Database=ecommerce;Username=postgres;Password=postgres";
+        var connectionString = AppConnectionStrings.GetPostgres(configuration);
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString, npgsqlOptions =>
@@ -101,7 +100,7 @@ public static class DependencyInjection
         });
 
         // 4. Redis Caching
-        var redisConnection = configuration.GetConnectionString("Redis") ?? "localhost:6379";
+        var redisConnection = AppConnectionStrings.GetRedis(configuration);
         var redisOptions = ConfigurationOptions.Parse(redisConnection);
         // A Redis outage must not stop the host from starting, and must not throw on the first
         // request either: the multiplexer keeps reconnecting in the background while the cache
