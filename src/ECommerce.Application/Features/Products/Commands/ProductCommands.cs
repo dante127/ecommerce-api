@@ -240,6 +240,18 @@ public sealed class DeleteProductCommandHandler : IRequestHandler<DeleteProductC
 // 4. Patch Stock (Atomic UPDATE)
 public sealed record PatchProductStockCommand(Guid ProductId, int Delta) : IRequest<Result>;
 
+public sealed class PatchProductStockCommandValidator : AbstractValidator<PatchProductStockCommand>
+{
+    // Bounded so a hostile delta cannot overflow the SQL-side Quantity + Delta arithmetic.
+    private const int MaxAbsoluteDelta = 1_000_000;
+
+    public PatchProductStockCommandValidator()
+    {
+        RuleFor(x => x.ProductId).NotEmpty();
+        RuleFor(x => x.Delta).InclusiveBetween(-MaxAbsoluteDelta, MaxAbsoluteDelta);
+    }
+}
+
 public sealed class PatchProductStockCommandHandler : IRequestHandler<PatchProductStockCommand, Result>
 {
     private readonly IApplicationDbContext _context;

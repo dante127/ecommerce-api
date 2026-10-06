@@ -26,6 +26,14 @@ public sealed class PaymentOptions
     public string Currency { get; set; } = "usd";
 
     /// <summary>
+    /// Where Stripe sends the customer after the checkout session completes or is abandoned. The
+    /// CHECKOUT_SESSION_ID placeholder is replaced by Stripe. Must be overridden per deployment;
+    /// the defaults point at a placeholder domain.
+    /// </summary>
+    public string SuccessUrl { get; set; } = "https://example.com/checkout/success?session_id={CHECKOUT_SESSION_ID}";
+    public string CancelUrl { get; set; } = "https://example.com/checkout/cancel";
+
+    /// <summary>
     /// When true, payments flagged RequiresRefund (late webhook onto a cancelled order, or a
     /// cancelled Paid order) are refunded through the gateway immediately. When false, they stay
     /// flagged for manual finance review.

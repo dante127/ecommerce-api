@@ -9,7 +9,7 @@ public sealed record CartItemResponse(
     decimal Subtotal);
 
 public sealed record CartResponse(
-    Guid CartId,
+    Guid? CartId,
     IReadOnlyCollection<CartItemResponse> Items,
     decimal TotalAmount);
 

@@ -103,7 +103,8 @@ public sealed class ProductsController : BaseApiController
 
     [HttpPatch("{id:guid}/stock")]
     [Authorize(Roles = UserRoles.Admin)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> PatchStock(Guid id, [FromBody] PatchStockRequest request, CancellationToken cancellationToken)

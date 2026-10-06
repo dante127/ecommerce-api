@@ -40,7 +40,7 @@ public sealed class GetCartQueryHandler : IRequestHandler<GetCartQuery, Result<C
             // A GET must not mutate state, so no cart row is created here. The cart is
             // created by the first cart write; an empty projection is returned instead.
             return Result<CartResponse>.Success(
-                new CartResponse(Guid.Empty, Array.Empty<CartItemResponse>(), 0m));
+                new CartResponse(null, Array.Empty<CartItemResponse>(), 0m));
         }
 
         // Projected straight from the database rather than from the tracked cart graph.
