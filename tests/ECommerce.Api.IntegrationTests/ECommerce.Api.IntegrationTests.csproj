@@ -18,6 +18,12 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
 
+  <!-- Compile-time visibility of the full ASP.NET Core shared framework (e.g. ForwardedHeadersOptions
+       used by the forwarded-header regression tests), independent of what flows through references. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>

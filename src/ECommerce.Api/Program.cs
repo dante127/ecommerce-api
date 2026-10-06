@@ -9,6 +9,9 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Serilog;
 
+// System.Net supplies IPAddress/IPNetwork for the forwarded-header trust list below.
+using System.Net;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Serilog Setup
@@ -57,11 +60,46 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 // 6. Forwarded Headers for Proxy Support
+// Only proxies declared here may set client-identity headers. An undeclared caller's forwarded
+// headers are ignored, so Connection.RemoteIpAddress stays the real socket address and the auth
+// rate limiter cannot be partition-hopped by header spoofing. The loopback defaults apply until a
+// deployment replaces them with its actual proxy list (see README: Deployment).
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
+
+    var configuredProxies = builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>();
+    if (configuredProxies is { Length: > 0 })
+    {
+        // The configured list is the complete truth: it replaces the loopback defaults entirely.
+        options.KnownProxies.Clear();
+        foreach (var entry in configuredProxies)
+        {
+            if (!IPAddress.TryParse(entry, out var proxy))
+            {
+                throw new InvalidOperationException(
+                    $"ForwardedHeaders:KnownProxies entry '{entry}' is not a valid IP address. Configure it via ForwardedHeaders__KnownProxies__0.");
+            }
+
+            options.KnownProxies.Add(proxy);
+        }
+    }
+
+    var configuredNetworks = builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>();
+    if (configuredNetworks is { Length: > 0 })
+    {
+        options.KnownIPNetworks.Clear();
+        foreach (var entry in configuredNetworks)
+        {
+            if (!System.Net.IPNetwork.TryParse(entry, out var network))
+            {
+                throw new InvalidOperationException(
+                    $"ForwardedHeaders:KnownNetworks entry '{entry}' is not a valid CIDR network (e.g. 10.0.0.0/8). Configure it via ForwardedHeaders__KnownNetworks__0.");
+            }
+
+            options.KnownIPNetworks.Add(network);
+        }
+    }
 });
 
 // 7. Rate Limiting
