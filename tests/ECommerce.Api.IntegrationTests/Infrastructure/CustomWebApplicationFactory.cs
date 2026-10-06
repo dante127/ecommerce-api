@@ -7,7 +7,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Testcontainers.PostgreSql;
 using Testcontainers.Redis;
@@ -78,8 +80,23 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         var timeProvider = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
         await context.Database.MigrateAsync();
-        await DatabaseSeeder.SeedAsync(context, userManager, roleManager, logger, timeProvider);
+        await DatabaseSeeder.SeedAsync(
+            context,
+            userManager,
+            roleManager,
+            logger,
+            timeProvider,
+            scope.ServiceProvider.GetRequiredService<IConfiguration>(),
+            scope.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment());
     }
+
+    /// <summary>
+    /// The auth rate-limit permit limit for this host. Most tests register many users from one
+    /// address and need it raised; a derived host can lower it to observe the limiter directly.
+    /// A virtual property instead of a UseSetting override because duplicate host settings are
+    /// resolved first-write-wins, so a derived factory could not reliably replace the base value.
+    /// </summary>
+    protected virtual string AuthPermitLimit => "10000";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -89,7 +106,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
             builder.UseSetting("ConnectionStrings:Redis", _redisContainer.GetConnectionString());
             // The concurrency tests register ten users from a single address, so the auth
             // rate limit has to be raised for the test host.
-            builder.UseSetting("RateLimiting:Auth:PermitLimit", "10000");
+            builder.UseSetting("RateLimiting:Auth:PermitLimit", AuthPermitLimit);
             builder.UseSetting("Stripe:SecretKey", "sk_test_placeholder");
             builder.UseSetting("Stripe:WebhookSecret", "whsec_placeholder");
         }

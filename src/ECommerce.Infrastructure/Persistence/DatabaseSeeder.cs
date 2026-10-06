@@ -1,7 +1,9 @@
+using System.Security.Cryptography;
 using ECommerce.Domain.Entities;
 using ECommerce.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace ECommerce.Infrastructure.Persistence;
@@ -13,13 +15,16 @@ public static class DatabaseSeeder
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<Guid>> roleManager,
         ILogger logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IConfiguration configuration,
+        bool isDevelopment)
     {
         var now = timeProvider.GetUtcNow();
 
         try
         {
-            // 1. Seed Roles
+            // 1. Roles — reference data. Registration assigns one of these on sign-up and fails
+            //    loudly when the role is missing, so they are seeded unconditionally.
             string[] roles = ["Admin", "Customer"];
             foreach (var role in roles)
             {
@@ -30,55 +35,22 @@ public static class DatabaseSeeder
                 }
             }
 
-            // 2. Seed Admin User
-            const string adminEmail = "admin@ecommerce.com";
-            var adminUser = await userManager.FindByEmailAsync(adminEmail);
-            if (adminUser == null)
-            {
-                adminUser = new ApplicationUser
-                {
-                    Id = Guid.NewGuid(),
-                    UserName = adminEmail,
-                    Email = adminEmail,
-                    FirstName = "System",
-                    LastName = "Administrator",
-                    EmailConfirmed = true,
-                    CreatedAt = now
-                };
+            // 2. Demo/bootstrap accounts. No password literal lives in this repository: outside
+            //    Development the accounts are only created when a password is supplied through
+            //    configuration (Seed:AdminPassword / Seed:CustomerPassword), and in Development an
+            //    unconfigured password is generated and logged once. A deployment that enables
+            //    Database:AutoMigrate therefore cannot mint a publicly known admin account.
+            await EnsureDemoAccountAsync(userManager, logger, configuration, isDevelopment, now,
+                emailConfigKey: "Seed:AdminEmail", defaultEmail: "admin@ecommerce.com",
+                passwordConfigKey: "Seed:AdminPassword",
+                firstName: "System", lastName: "Administrator", role: "Admin");
 
-                var result = await userManager.CreateAsync(adminUser, "Admin123!#");
-                if (result.Succeeded)
-                {
-                    await userManager.AddToRoleAsync(adminUser, "Admin");
-                    logger.LogInformation("Seeded default admin user: {Email}", adminEmail);
-                }
-            }
+            await EnsureDemoAccountAsync(userManager, logger, configuration, isDevelopment, now,
+                emailConfigKey: "Seed:CustomerEmail", defaultEmail: "customer@ecommerce.com",
+                passwordConfigKey: "Seed:CustomerPassword",
+                firstName: "Jane", lastName: "Customer", role: "Customer");
 
-            // 3. Seed Customer User
-            const string customerEmail = "customer@ecommerce.com";
-            var customerUser = await userManager.FindByEmailAsync(customerEmail);
-            if (customerUser == null)
-            {
-                customerUser = new ApplicationUser
-                {
-                    Id = Guid.NewGuid(),
-                    UserName = customerEmail,
-                    Email = customerEmail,
-                    FirstName = "Jane",
-                    LastName = "Customer",
-                    EmailConfirmed = true,
-                    CreatedAt = now
-                };
-
-                var result = await userManager.CreateAsync(customerUser, "Customer123!#");
-                if (result.Succeeded)
-                {
-                    await userManager.AddToRoleAsync(customerUser, "Customer");
-                    logger.LogInformation("Seeded default customer user: {Email}", customerEmail);
-                }
-            }
-
-            // 4. Seed Categories
+            // 3. Seed Categories
             if (!await context.Categories.AnyAsync())
             {
                 var electronics = Category.Create("Electronics", "electronics", null, now);
@@ -89,7 +61,7 @@ public static class DatabaseSeeder
                 await context.SaveChangesAsync();
                 logger.LogInformation("Seeded initial categories.");
 
-                // 5. Seed Products & InventoryItems
+                // 4. Seed Products & InventoryItems
                 if (!await context.Products.AnyAsync())
                 {
                     var laptop = Product.Create("TECH-LAP-001", "Gaming Laptop Pro", "High-performance gaming laptop with 32GB RAM", 1499.99m, computers.Id, now);
@@ -115,5 +87,98 @@ public static class DatabaseSeeder
         {
             logger.LogError(ex, "An error occurred while seeding the database.");
         }
+    }
+
+    private static async Task EnsureDemoAccountAsync(
+        UserManager<ApplicationUser> userManager,
+        ILogger logger,
+        IConfiguration configuration,
+        bool isDevelopment,
+        DateTimeOffset now,
+        string emailConfigKey,
+        string defaultEmail,
+        string passwordConfigKey,
+        string firstName,
+        string lastName,
+        string role)
+    {
+        var email = (configuration[emailConfigKey] ?? defaultEmail).Trim().ToLowerInvariant();
+        if (await userManager.FindByEmailAsync(email) != null)
+        {
+            return;
+        }
+
+        var password = configuration[passwordConfigKey];
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            if (!isDevelopment)
+            {
+                logger.LogInformation(
+                    "Skipped seeding the {Role} account: {PasswordKey} is not configured, and generated passwords are Development-only.",
+                    role, passwordConfigKey);
+                return;
+            }
+
+            password = GeneratePassword();
+            logger.LogInformation(
+                "Seeded {Role} account {Email} with a generated password: {Password} (Development only; set {PasswordKey} to control it)",
+                role, email, password, passwordConfigKey);
+        }
+
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = email,
+            Email = email,
+            FirstName = firstName,
+            LastName = lastName,
+            EmailConfirmed = true,
+            CreatedAt = now
+        };
+
+        var result = await userManager.CreateAsync(user, password);
+        if (result.Succeeded)
+        {
+            await userManager.AddToRoleAsync(user, role);
+            logger.LogInformation("Seeded {Role} account: {Email}", role, email);
+        }
+        else
+        {
+            logger.LogError("Failed to seed the {Role} account: {Errors}",
+                role, string.Join("; ", result.Errors.Select(e => e.Description)));
+        }
+    }
+
+    /// <summary>
+    /// Satisfies the Identity password policy (upper, lower, digit, non-alphanumeric, >= 8)
+    /// without embedding a guessable pattern.
+    /// </summary>
+    private static string GeneratePassword()
+    {
+        const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        const string lower = "abcdefghijkmnopqrstuvwxyz";
+        const string digits = "23456789";
+        const string special = "!#$%&*+-?";
+        const int length = 16;
+
+        var all = upper + lower + digits + special;
+        var chars = new char[length];
+        chars[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+        chars[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+        chars[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+        chars[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
+        for (var i = 4; i < length; i++)
+        {
+            chars[i] = all[RandomNumberGenerator.GetInt32(all.Length)];
+        }
+
+        // Fisher-Yates so the guaranteed character classes are not always in the first positions.
+        for (var i = length - 1; i > 0; i--)
+        {
+            var j = RandomNumberGenerator.GetInt32(i + 1);
+            (chars[i], chars[j]) = (chars[j], chars[i]);
+        }
+
+        return new string(chars);
     }
 }

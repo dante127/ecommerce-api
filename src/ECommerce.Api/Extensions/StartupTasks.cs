@@ -2,6 +2,7 @@ using ECommerce.Infrastructure.Identity;
 using ECommerce.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace ECommerce.Api.Extensions;
 
@@ -31,7 +32,9 @@ public static class StartupTasks
                 services.GetRequiredService<UserManager<ApplicationUser>>(),
                 services.GetRequiredService<RoleManager<IdentityRole<Guid>>>(),
                 logger,
-                services.GetRequiredService<TimeProvider>());
+                services.GetRequiredService<TimeProvider>(),
+                services.GetRequiredService<IConfiguration>(),
+                app.Environment.IsDevelopment());
 
             logger.LogInformation("Database migrated and seeded.");
         }
