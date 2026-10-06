@@ -322,5 +322,10 @@ We resolve this by applying a **10-second grace window**:
 
 ---
 
+## Deferred by Design
+
+* **Email confirmation** — accounts can register and order without confirming their address. The confirmation flow (sender infrastructure, tokens, resend) is deferred; it gates no other feature.
+* **Checkout idempotency keys** — concurrent duplicate checkouts are already serialized per user (the loser observes the emptied cart and fails exactly like a second click). A client-facing idempotency-key contract for automatic retry semantics remains a stretch goal.
+
 ## 📄 License
 MIT License. Free for educational, commercial, and interview portfolio demonstration.
