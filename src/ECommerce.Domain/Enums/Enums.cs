@@ -15,7 +15,8 @@ public enum PaymentStatus
     Pending,
     Succeeded,
     Expired,
-    RequiresRefund
+    RequiresRefund,
+    Refunded
 }
 
 public enum AvailabilityStatus

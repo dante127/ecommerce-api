@@ -20,4 +20,11 @@ public interface IApplicationDbContext
     DatabaseFacade Database { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Serializes concurrent checkouts for one user within the caller's transaction: the second
+    /// checkout waits, then observes the emptied cart and fails the same way a second click after
+    /// the first checkout completes, instead of creating a duplicate order.
+    /// </summary>
+    Task SerializeCheckoutsForUserAsync(Guid userId, CancellationToken cancellationToken = default);
 }

@@ -24,6 +24,13 @@ public sealed class PaymentOptions
     public int PaymentDeadlineMinutes { get; set; } = 35;
     public int CheckoutSessionMinutes { get; set; } = 31;
     public string Currency { get; set; } = "usd";
+
+    /// <summary>
+    /// When true, payments flagged RequiresRefund (late webhook onto a cancelled order, or a
+    /// cancelled Paid order) are refunded through the gateway immediately. When false, they stay
+    /// flagged for manual finance review.
+    /// </summary>
+    public bool AutoRefund { get; set; } = true;
 }
 
 /// <summary>Catalogue display policy, bound from the "Catalog" configuration section.</summary>

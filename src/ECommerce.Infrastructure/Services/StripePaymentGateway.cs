@@ -116,6 +116,32 @@ public sealed class StripePaymentGateway : IPaymentGateway
             paymentIntentId);
     }
 
+    public async Task<bool> TryRefundAsync(string paymentIntentId, CancellationToken cancellationToken = default)
+    {
+        if (_useMockGateway)
+        {
+            _logger.LogInformation("Mock Stripe refund accepted for payment intent {PaymentIntentId}.", paymentIntentId);
+            return true;
+        }
+
+        try
+        {
+            // A full refund needs only the intent: Stripe uses the payment's original amount and
+            // currency, which cannot drift from what the customer actually paid.
+            var service = new RefundService();
+            await service.CreateAsync(
+                new RefundCreateOptions { PaymentIntent = paymentIntentId },
+                new RequestOptions { ApiKey = _secretKey },
+                cancellationToken);
+            return true;
+        }
+        catch (StripeException ex)
+        {
+            _logger.LogError(ex, "Stripe refund failed for payment intent {PaymentIntentId}.", paymentIntentId);
+            return false;
+        }
+    }
+
     private static WebhookEventResult ParseUnverifiedWebhook(string payload)
     {
         using var doc = System.Text.Json.JsonDocument.Parse(payload);

@@ -35,4 +35,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         // Apply entity configurations defined in this assembly
         builder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
     }
+
+    public async Task SerializeCheckoutsForUserAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        // PostgreSQL-specific by design (the transaction-scoped advisory lock that backs the
+        // per-user checkout serialization); the Application layer sees only the intent.
+        // hashtextextended maps the user id to a bigint key; collisions across users merely add
+        // harmless extra serialization.
+        await Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({userId}::text, 0))", cancellationToken);
+    }
 }

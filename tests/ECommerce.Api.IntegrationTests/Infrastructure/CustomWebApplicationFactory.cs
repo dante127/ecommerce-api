@@ -124,6 +124,43 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         return client;
     }
 
+    /// <summary>
+    /// Creates a dedicated admin user through Identity and returns an authenticated client for
+    /// it. The seeder no longer creates an account with a known password, so admin-authorized
+    /// tests provision their own.
+    /// </summary>
+    public async Task<HttpClient> CreateAdminClientAsync()
+    {
+        var email = $"admin_{Guid.NewGuid():N}@test.com";
+        const string password = "Admin123!#";
+
+        using (var scope = Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var admin = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = email,
+                Email = email,
+                FirstName = "Test",
+                LastName = "Admin",
+                EmailConfirmed = true,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+
+            var createResult = await userManager.CreateAsync(admin, password);
+            if (!createResult.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "Failed to seed a test admin: " + string.Join("; ", createResult.Errors.Select(e => e.Description)));
+            }
+
+            await userManager.AddToRoleAsync(admin, "Admin");
+        }
+
+        return await CreateAuthenticatedClientAsync(email, password);
+    }
+
     public new async Task DisposeAsync()
     {
         if (_dbContainer != null)

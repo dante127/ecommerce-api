@@ -1,3 +1,4 @@
+using ECommerce.Application.Common.Interfaces;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +15,8 @@ public static class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
+
+        services.AddScoped<IRefundProcessor, Features.Payments.RefundProcessor>();
 
         return services;
     }

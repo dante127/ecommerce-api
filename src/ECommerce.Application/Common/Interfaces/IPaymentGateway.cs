@@ -19,4 +19,10 @@ public interface IPaymentGateway
         CancellationToken cancellationToken = default);
 
     WebhookEventResult VerifyAndParseWebhook(string payload, string signatureHeader);
+
+    /// <summary>
+    /// Refunds the full amount of a payment intent. Returns false when the gateway rejects the
+    /// refund, so the payment can stay flagged RequiresRefund for operational follow-up.
+    /// </summary>
+    Task<bool> TryRefundAsync(string paymentIntentId, CancellationToken cancellationToken = default);
 }

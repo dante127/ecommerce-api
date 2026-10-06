@@ -81,6 +81,13 @@ public sealed class CheckoutCommandHandler : IRequestHandler<CheckoutCommand, Re
             return Result<OrderResponse>.Failure(Error.Unauthenticated);
         }
 
+        // Begin the transaction and serialize concurrent checkouts for this user BEFORE reading
+        // the cart: without it, two simultaneous checkouts both observe the populated cart and
+        // create duplicate orders. The loser waits on the lock, then finds the cart emptied by the
+        // winner and fails exactly like a second click after the first checkout completes.
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        await _context.SerializeCheckoutsForUserAsync(userId.Value, cancellationToken);
+
         var cart = await _context.Carts
             .Include(c => c.Items)
             .ThenInclude(i => i.Product)
@@ -108,8 +115,6 @@ public sealed class CheckoutCommandHandler : IRequestHandler<CheckoutCommand, Re
         var now = _timeProvider.GetUtcNow();
         var paymentDeadline = now.AddMinutes(_paymentOptions.PaymentDeadlineMinutes);
 
-        // Begin database transaction for atomic checkout and inventory reservation
-        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             foreach (var item in sortedItems)
@@ -161,6 +166,74 @@ public sealed class CheckoutCommandHandler : IRequestHandler<CheckoutCommand, Re
     }
 }
 
+// 3. Fulfillment transition (Admin): Processing -> Shipped -> Delivered via the domain state machine
+public sealed record TransitionOrderStatusCommand(Guid OrderId, OrderStatus Target) : IRequest<Result<OrderResponse>>;
+
+public sealed class TransitionOrderStatusCommandHandler : IRequestHandler<TransitionOrderStatusCommand, Result<OrderResponse>>
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly TimeProvider _timeProvider;
+
+    public TransitionOrderStatusCommandHandler(
+        IApplicationDbContext context,
+        ICurrentUserService currentUserService,
+        TimeProvider timeProvider)
+    {
+        _context = context;
+        _currentUserService = currentUserService;
+        _timeProvider = timeProvider;
+    }
+
+    public async Task<Result<OrderResponse>> Handle(TransitionOrderStatusCommand request, CancellationToken cancellationToken)
+    {
+        var userId = _currentUserService.UserId;
+        if (!userId.HasValue)
+        {
+            return Result<OrderResponse>.Failure(Error.Unauthenticated);
+        }
+
+        if (!_currentUserService.IsInRole(UserRoles.Admin))
+        {
+            return Result<OrderResponse>.Failure(Error.Forbidden("Order.Forbidden", "Only admins can advance order fulfillment."));
+        }
+
+        // Paid -> Processing -> Shipped -> Delivered are enforced by the aggregate; anything else
+        // throws InvalidStateTransitionException, rendered as a 400 by the global handler.
+        var order = await _context.Orders
+            .Include(o => o.Items)
+            .Include(o => o.Payments)
+            .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken);
+
+        if (order == null)
+        {
+            return Result<OrderResponse>.Failure(Error.NotFound("Order.NotFound", "Order not found."));
+        }
+
+        var now = _timeProvider.GetUtcNow();
+        switch (request.Target)
+        {
+            case OrderStatus.Processing:
+                order.StartProcessing(now);
+                break;
+            case OrderStatus.Shipped:
+                order.MarkAsShipped(now);
+                break;
+            case OrderStatus.Delivered:
+                order.MarkAsDelivered(now);
+                break;
+            default:
+                return Result<OrderResponse>.Failure(
+                    Error.BadRequest("Order.InvalidTransition", $"Fulfillment can only advance to Processing, Shipped or Delivered, not '{request.Target}'."));
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Result<OrderResponse>.Success(order.ToResponse(order.Payments
+            .Select(p => new PaymentSummaryResponse(p.Id, p.Status.ToString(), p.Amount, p.StripePaymentIntentId, p.CreatedAt))
+            .ToList()));
+    }
+}
 // 2. Cancel Order Command
 public sealed record CancelOrderCommand(Guid OrderId, string? Reason = null) : IRequest<Result>;
 
@@ -168,6 +241,7 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
 {
     private readonly IApplicationDbContext _context;
     private readonly IInventoryService _inventoryService;
+    private readonly IRefundProcessor _refundProcessor;
     private readonly ICurrentUserService _currentUserService;
     private readonly ICacheService _cacheService;
     private readonly TimeProvider _timeProvider;
@@ -175,12 +249,14 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
     public CancelOrderCommandHandler(
         IApplicationDbContext context,
         IInventoryService inventoryService,
+        IRefundProcessor refundProcessor,
         ICurrentUserService currentUserService,
         ICacheService cacheService,
         TimeProvider timeProvider)
     {
         _context = context;
         _inventoryService = inventoryService;
+        _refundProcessor = refundProcessor;
         _currentUserService = currentUserService;
         _cacheService = cacheService;
         _timeProvider = timeProvider;
@@ -196,6 +272,7 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
 
         var order = await _context.Orders
             .Include(o => o.Items)
+            .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken);
 
         if (order == null)
@@ -224,6 +301,15 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
             foreach (var item in order.Items)
             {
                 await _inventoryService.ReleaseAsync(item.ProductId, item.Quantity, cancellationToken);
+            }
+
+            // Cancelling a Paid order must not leave customer money held for nothing: succeeded
+            // payments are flagged and refunded under the auto-refund policy (flag-only when the
+            // policy is disabled or the gateway refuses).
+            foreach (var payment in order.Payments.Where(p => p.Status == PaymentStatus.Succeeded))
+            {
+                payment.MarkRequiresRefund(now);
+                await _refundProcessor.AttemptRefundAsync(payment, now, cancellationToken);
             }
 
             await _context.SaveChangesAsync(cancellationToken);

@@ -61,9 +61,26 @@ public sealed class Payment : AggregateRoot<Guid>
         }
     }
 
-    public void MarkRequiresRefund(DateTimeOffset now)
+    public void MarkRequiresRefund(DateTimeOffset now, string? stripePaymentIntentId = null)
     {
         Status = PaymentStatus.RequiresRefund;
+
+        // A late completed webhook carries the intent id; recording it here is what makes the
+        // flagged payment refundable even though MarkSucceeded never ran for it.
+        if (!string.IsNullOrWhiteSpace(stripePaymentIntentId))
+        {
+            StripePaymentIntentId = stripePaymentIntentId;
+        }
+
+        UpdatedAt = now;
+    }
+
+    public void MarkRefunded(DateTimeOffset now)
+    {
+        if (Status != PaymentStatus.RequiresRefund && Status != PaymentStatus.Succeeded)
+            throw new DomainException($"Cannot refund a payment in status '{Status}'.");
+
+        Status = PaymentStatus.Refunded;
         UpdatedAt = now;
     }
 }

@@ -90,4 +90,39 @@ public class PaymentTests
         evt.EventType.Should().Be("checkout.session.completed");
         evt.ProcessedAt.Should().Be(now);
     }
+
+    [Fact]
+    public void MarkRefunded_FromRequiresRefund_TransitionsToRefunded()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var payment = Payment.Create(Guid.NewGuid(), "cs_x", "https://example.com", 10m, now.AddMinutes(30), now);
+        payment.MarkRequiresRefund(now);
+
+        payment.MarkRefunded(now);
+
+        payment.Status.Should().Be(PaymentStatus.Refunded);
+    }
+
+    [Fact]
+    public void MarkRefunded_FromPending_ThrowsDomainException()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var payment = Payment.Create(Guid.NewGuid(), "cs_x", "https://example.com", 10m, now.AddMinutes(30), now);
+
+        var act = () => payment.MarkRefunded(now);
+
+        act.Should().Throw<DomainException>();
+    }
+
+    [Fact]
+    public void MarkRequiresRefund_RecordsThePaymentIntentId()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var payment = Payment.Create(Guid.NewGuid(), "cs_x", "https://example.com", 10m, now.AddMinutes(30), now);
+
+        payment.MarkRequiresRefund(now, "pi_late_webhook");
+
+        payment.Status.Should().Be(PaymentStatus.RequiresRefund);
+        payment.StripePaymentIntentId.Should().Be("pi_late_webhook");
+    }
 }

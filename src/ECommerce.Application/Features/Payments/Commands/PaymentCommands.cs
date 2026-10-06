@@ -150,15 +150,18 @@ public sealed record ProcessWebhookCommand(
 public sealed class ProcessWebhookCommandHandler : IRequestHandler<ProcessWebhookCommand, Result>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IRefundProcessor _refundProcessor;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ProcessWebhookCommandHandler> _logger;
 
     public ProcessWebhookCommandHandler(
         IApplicationDbContext context,
+        IRefundProcessor refundProcessor,
         TimeProvider timeProvider,
         ILogger<ProcessWebhookCommandHandler> logger)
     {
         _context = context;
+        _refundProcessor = refundProcessor;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -191,10 +194,13 @@ public sealed class ProcessWebhookCommandHandler : IRequestHandler<ProcessWebhoo
                     // Late payment check: if order was cancelled in the meantime
                     if (payment.Order.Status == OrderStatus.Cancelled)
                     {
-                        payment.MarkRequiresRefund(now);
+                        payment.MarkRequiresRefund(now, request.PaymentIntentId);
                         _logger.LogWarning(
                             "Order {OrderId} was cancelled before payment succeeded. Payment {PaymentId} marked as RequiresRefund.",
                             payment.OrderId, payment.Id);
+
+                        // Auto-refund policy: the flag stays in place on failure or when disabled.
+                        await _refundProcessor.AttemptRefundAsync(payment, now, cancellationToken);
                     }
                     else if (payment.Order.Status == OrderStatus.Pending)
                     {

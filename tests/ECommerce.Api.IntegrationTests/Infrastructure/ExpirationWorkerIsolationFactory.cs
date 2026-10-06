@@ -47,6 +47,9 @@ public sealed class OrderCancellationFailingDbContext : IApplicationDbContext
 
     public DatabaseFacade Database => _inner.Database;
 
+    public Task SerializeCheckoutsForUserAsync(Guid userId, CancellationToken cancellationToken = default)
+        => _inner.SerializeCheckoutsForUserAsync(userId, cancellationToken);
+
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         if (_injection.FailingOrderId is { } failingId &&
