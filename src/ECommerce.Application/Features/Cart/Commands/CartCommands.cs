@@ -40,7 +40,7 @@ public sealed class AddItemToCartCommandHandler : IRequestHandler<AddItemToCartC
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Result<CartResponse>.Failure(Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result<CartResponse>.Failure(Error.Unauthenticated);
         }
 
         var userId = _currentUserService.UserId.Value;
@@ -120,7 +120,7 @@ public sealed class UpdateCartItemCommandHandler : IRequestHandler<UpdateCartIte
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Result<CartResponse>.Failure(Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result<CartResponse>.Failure(Error.Unauthenticated);
         }
 
         var userId = _currentUserService.UserId.Value;
@@ -185,7 +185,7 @@ public sealed class RemoveCartItemCommandHandler : IRequestHandler<RemoveCartIte
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Result.Failure(Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result.Failure(Error.Unauthenticated);
         }
 
         var userId = _currentUserService.UserId.Value;
@@ -227,7 +227,7 @@ public sealed class ClearCartCommandHandler : IRequestHandler<ClearCartCommand, 
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Result.Failure(Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result.Failure(Error.Unauthenticated);
         }
 
         var userId = _currentUserService.UserId.Value;

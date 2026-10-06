@@ -1,11 +1,13 @@
 using ECommerce.Application.Common.Interfaces;
 using ECommerce.Application.Common.Models;
+using ECommerce.Application.Common.Options;
 using ECommerce.Application.Features.Auth.DTOs;
 using ECommerce.Domain.Entities;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ECommerce.Application.Features.Auth.Commands.RefreshToken;
 
@@ -25,12 +27,11 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
     /// <summary>Concurrent refreshes inside this window are treated as a client race, not as reuse.</summary>
     private static readonly TimeSpan GraceWindow = TimeSpan.FromSeconds(10);
 
-    private const int AccessTokenLifetimeSeconds = 900;
-
     private readonly IApplicationDbContext _context;
     private readonly ITokenService _tokenService;
     private readonly IIdentityService _identityService;
     private readonly TimeProvider _timeProvider;
+    private readonly JwtOptions _jwtOptions;
     private readonly ILogger<RefreshTokenCommandHandler> _logger;
 
     public RefreshTokenCommandHandler(
@@ -38,12 +39,14 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
         ITokenService tokenService,
         IIdentityService identityService,
         TimeProvider timeProvider,
+        IOptions<JwtOptions> jwtOptions,
         ILogger<RefreshTokenCommandHandler> logger)
     {
         _context = context;
         _tokenService = tokenService;
         _identityService = identityService;
         _timeProvider = timeProvider;
+        _jwtOptions = jwtOptions.Value;
         _logger = logger;
     }
 
@@ -53,7 +56,7 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
         var now = _timeProvider.GetUtcNow();
         var newRawToken = _tokenService.GenerateRefreshToken();
         var newHashedToken = _tokenService.HashToken(newRawToken);
-        var newExpiry = now.AddDays(7);
+        var newExpiry = now.AddDays(_jwtOptions.RefreshTokenExpiryDays);
 
         // One transaction covers the revoke and the replacement insert, so a failure can no
         // longer leave the caller holding a revoked token with no replacement.
@@ -178,6 +181,6 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
             userResult.Value.Roles);
 
         return Result<AuthResponse>.Success(
-            new AuthResponse(accessToken, rawRefreshToken, AccessTokenLifetimeSeconds));
+            new AuthResponse(accessToken, rawRefreshToken, _jwtOptions.ExpiryMinutes * 60));
     }
 }

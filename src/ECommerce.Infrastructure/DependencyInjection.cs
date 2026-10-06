@@ -1,5 +1,6 @@
 using System.Text;
 using ECommerce.Application.Common.Interfaces;
+using ECommerce.Application.Common.Options;
 using ECommerce.Infrastructure.Identity;
 using ECommerce.Infrastructure.Persistence;
 using ECommerce.Infrastructure.Services;
@@ -35,6 +36,12 @@ public static class DependencyInjection
             }));
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
+
+        // Typed policy options declared by the Application layer, bound here so the composition
+        // root owns the configuration source. Defaults live on the option types themselves.
+        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.Configure<PaymentOptions>(configuration.GetSection(PaymentOptions.SectionName));
+        services.Configure<CatalogOptions>(configuration.GetSection(CatalogOptions.SectionName));
 
         // 2. ASP.NET Core Identity
         services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>

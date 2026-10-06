@@ -48,7 +48,7 @@ public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategor
         await _context.SaveChangesAsync(cancellationToken);
 
         // Invalidate catalog cache via atomic Redis version increment
-        await _cacheService.IncrementVersionAsync("catalog:version", cancellationToken);
+        await _cacheService.IncrementVersionAsync(CatalogCacheKeys.VersionKey, cancellationToken);
 
         var response = new CategoryResponse(category.Id, category.Name, category.Slug, category.ParentId, category.IsActive);
         return Result<CategoryResponse>.Success(response);
@@ -98,7 +98,7 @@ public sealed class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategor
         category.Update(request.Name, request.Slug, request.ParentId, now);
         await _context.SaveChangesAsync(cancellationToken);
 
-        await _cacheService.IncrementVersionAsync("catalog:version", cancellationToken);
+        await _cacheService.IncrementVersionAsync(CatalogCacheKeys.VersionKey, cancellationToken);
 
         var response = new CategoryResponse(category.Id, category.Name, category.Slug, category.ParentId, category.IsActive);
         return Result<CategoryResponse>.Success(response);
@@ -136,7 +136,7 @@ public sealed class DeleteCategoryCommandHandler : IRequestHandler<DeleteCategor
         _context.Categories.Remove(category);
         await _context.SaveChangesAsync(cancellationToken);
 
-        await _cacheService.IncrementVersionAsync("catalog:version", cancellationToken);
+        await _cacheService.IncrementVersionAsync(CatalogCacheKeys.VersionKey, cancellationToken);
 
         return Result.Success();
     }

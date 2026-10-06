@@ -1,11 +1,14 @@
+using ECommerce.Application.Common.Authorization;
 using ECommerce.Application.Common.Interfaces;
 using ECommerce.Application.Common.Models;
+using ECommerce.Application.Common.Options;
 using ECommerce.Application.Features.Payments.DTOs;
 using ECommerce.Domain.Entities;
 using ECommerce.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ECommerce.Application.Features.Payments.Commands;
 
@@ -18,6 +21,7 @@ public sealed class CreateCheckoutSessionCommandHandler : IRequestHandler<Create
     private readonly IPaymentGateway _paymentGateway;
     private readonly ICurrentUserService _currentUserService;
     private readonly TimeProvider _timeProvider;
+    private readonly PaymentOptions _paymentOptions;
     private readonly ILogger<CreateCheckoutSessionCommandHandler> _logger;
 
     public CreateCheckoutSessionCommandHandler(
@@ -25,12 +29,14 @@ public sealed class CreateCheckoutSessionCommandHandler : IRequestHandler<Create
         IPaymentGateway paymentGateway,
         ICurrentUserService currentUserService,
         TimeProvider timeProvider,
+        IOptions<PaymentOptions> paymentOptions,
         ILogger<CreateCheckoutSessionCommandHandler> logger)
     {
         _context = context;
         _paymentGateway = paymentGateway;
         _currentUserService = currentUserService;
         _timeProvider = timeProvider;
+        _paymentOptions = paymentOptions.Value;
         _logger = logger;
     }
 
@@ -39,8 +45,7 @@ public sealed class CreateCheckoutSessionCommandHandler : IRequestHandler<Create
         var userId = _currentUserService.UserId;
         if (!userId.HasValue)
         {
-            return Result<CheckoutSessionResponse>.Failure(
-                Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result<CheckoutSessionResponse>.Failure(Error.Unauthenticated);
         }
 
         var order = await _context.Orders
@@ -54,7 +59,7 @@ public sealed class CreateCheckoutSessionCommandHandler : IRequestHandler<Create
                 Error.NotFound("Order.NotFound", "Order not found."));
         }
 
-        var isAdmin = _currentUserService.IsInRole("Admin");
+        var isAdmin = _currentUserService.IsInRole(UserRoles.Admin);
         if (!isAdmin && order.UserId != userId.Value)
         {
             return Result<CheckoutSessionResponse>.Failure(
@@ -101,7 +106,7 @@ public sealed class CreateCheckoutSessionCommandHandler : IRequestHandler<Create
         }
 
         // Stripe requires session expiration to be at least 30 minutes in the future
-        var expiresAt = now.AddMinutes(31);
+        var expiresAt = now.AddMinutes(_paymentOptions.CheckoutSessionMinutes);
 
         var items = order.Items.Select(i => (
             i.ProductName,
@@ -111,7 +116,7 @@ public sealed class CreateCheckoutSessionCommandHandler : IRequestHandler<Create
         var sessionResult = await _paymentGateway.CreateCheckoutSessionAsync(
             order.Id,
             order.TotalAmount,
-            "usd",
+            _paymentOptions.Currency,
             items,
             expiresAt,
             cancellationToken);

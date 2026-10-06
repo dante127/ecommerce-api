@@ -1,11 +1,13 @@
 using ECommerce.Application.Common.Interfaces;
 using ECommerce.Application.Common.Models;
+using ECommerce.Application.Common.Options;
 using ECommerce.Application.Features.Products.DTOs;
 using ECommerce.Domain.Entities;
 using ECommerce.Domain.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace ECommerce.Application.Features.Products.Commands;
 
@@ -35,15 +37,18 @@ public sealed class CreateProductCommandHandler : IRequestHandler<CreateProductC
     private readonly IApplicationDbContext _context;
     private readonly ICacheService _cacheService;
     private readonly TimeProvider _timeProvider;
+    private readonly CatalogOptions _catalogOptions;
 
     public CreateProductCommandHandler(
         IApplicationDbContext context,
         ICacheService cacheService,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IOptions<CatalogOptions> catalogOptions)
     {
         _context = context;
         _cacheService = cacheService;
         _timeProvider = timeProvider;
+        _catalogOptions = catalogOptions.Value;
     }
 
     public async Task<Result<ProductResponse>> Handle(CreateProductCommand request, CancellationToken cancellationToken)
@@ -69,12 +74,12 @@ public sealed class CreateProductCommandHandler : IRequestHandler<CreateProductC
         await _context.SaveChangesAsync(cancellationToken);
 
         // Invalidate Redis catalog cache via version counter
-        await _cacheService.IncrementVersionAsync("catalog:version", cancellationToken);
+        await _cacheService.IncrementVersionAsync(CatalogCacheKeys.VersionKey, cancellationToken);
 
         var availability = request.InitialStock switch
         {
             <= 0 => AvailabilityStatus.OutOfStock,
-            <= 5 => AvailabilityStatus.LowStock,
+            var s when s <= _catalogOptions.LowStockThreshold => AvailabilityStatus.LowStock,
             _ => AvailabilityStatus.InStock
         };
 
@@ -119,15 +124,18 @@ public sealed class UpdateProductCommandHandler : IRequestHandler<UpdateProductC
     private readonly IApplicationDbContext _context;
     private readonly ICacheService _cacheService;
     private readonly TimeProvider _timeProvider;
+    private readonly CatalogOptions _catalogOptions;
 
     public UpdateProductCommandHandler(
         IApplicationDbContext context,
         ICacheService cacheService,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IOptions<CatalogOptions> catalogOptions)
     {
         _context = context;
         _cacheService = cacheService;
         _timeProvider = timeProvider;
+        _catalogOptions = catalogOptions.Value;
     }
 
     public async Task<Result<ProductResponse>> Handle(UpdateProductCommand request, CancellationToken cancellationToken)
@@ -166,13 +174,13 @@ public sealed class UpdateProductCommandHandler : IRequestHandler<UpdateProductC
                 Error.Conflict("Product.ConcurrencyConflict", "The product was modified by another user. Please reload and try again."));
         }
 
-        await _cacheService.IncrementVersionAsync("catalog:version", cancellationToken);
+        await _cacheService.IncrementVersionAsync(CatalogCacheKeys.VersionKey, cancellationToken);
 
         var stock = product.Inventory?.Quantity ?? 0;
         var availability = stock switch
         {
             <= 0 => AvailabilityStatus.OutOfStock,
-            <= 5 => AvailabilityStatus.LowStock,
+            var s when s <= _catalogOptions.LowStockThreshold => AvailabilityStatus.LowStock,
             _ => AvailabilityStatus.InStock
         };
 
@@ -223,7 +231,7 @@ public sealed class DeleteProductCommandHandler : IRequestHandler<DeleteProductC
         product.SoftDelete(now);
         await _context.SaveChangesAsync(cancellationToken);
 
-        await _cacheService.IncrementVersionAsync("catalog:version", cancellationToken);
+        await _cacheService.IncrementVersionAsync(CatalogCacheKeys.VersionKey, cancellationToken);
 
         return Result.Success();
     }
@@ -260,7 +268,7 @@ public sealed class PatchProductStockCommandHandler : IRequestHandler<PatchProdu
 
         if (rowsUpdated == 1)
         {
-            await _cacheService.IncrementVersionAsync("catalog:version", cancellationToken);
+            await _cacheService.IncrementVersionAsync(CatalogCacheKeys.VersionKey, cancellationToken);
             return Result.Success();
         }
 

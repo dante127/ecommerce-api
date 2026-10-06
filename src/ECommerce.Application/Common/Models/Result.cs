@@ -25,6 +25,12 @@ public sealed record Error(string Code, string Message, ErrorType Type = ErrorTy
     public static Error Unauthorized(string code, string message) => new(code, message, ErrorType.Unauthorized);
     public static Error Forbidden(string code, string message) => new(code, message, ErrorType.Forbidden);
     public static Error BadRequest(string code, string message) => new(code, message, ErrorType.BadRequest);
+
+    /// <summary>
+    /// The shared unauthenticated failure for handlers that cannot resolve a user id. One copy
+    /// instead of eleven, so the client-visible code cannot drift between endpoints.
+    /// </summary>
+    public static Error Unauthenticated => new("Auth.Unauthorized", "User is not authenticated.", ErrorType.Unauthorized);
 }
 
 public class Result

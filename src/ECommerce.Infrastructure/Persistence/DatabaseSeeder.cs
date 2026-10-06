@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using ECommerce.Application.Common.Authorization;
 using ECommerce.Domain.Entities;
 using ECommerce.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
@@ -25,7 +26,7 @@ public static class DatabaseSeeder
         {
             // 1. Roles — reference data. Registration assigns one of these on sign-up and fails
             //    loudly when the role is missing, so they are seeded unconditionally.
-            string[] roles = ["Admin", "Customer"];
+            string[] roles = [UserRoles.Admin, UserRoles.Customer];
             foreach (var role in roles)
             {
                 if (!await roleManager.RoleExistsAsync(role))

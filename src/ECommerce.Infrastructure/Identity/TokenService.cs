@@ -3,7 +3,9 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using ECommerce.Application.Common.Interfaces;
+using ECommerce.Application.Common.Options;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace ECommerce.Infrastructure.Identity;
@@ -11,11 +13,13 @@ namespace ECommerce.Infrastructure.Identity;
 public sealed class TokenService : ITokenService
 {
     private readonly IConfiguration _configuration;
+    private readonly JwtOptions _jwtOptions;
     private readonly TimeProvider _timeProvider;
 
-    public TokenService(IConfiguration configuration, TimeProvider timeProvider)
+    public TokenService(IConfiguration configuration, IOptions<JwtOptions> jwtOptions, TimeProvider timeProvider)
     {
         _configuration = configuration;
+        _jwtOptions = jwtOptions.Value;
         _timeProvider = timeProvider;
     }
 
@@ -25,7 +29,7 @@ public sealed class TokenService : ITokenService
             ?? throw new InvalidOperationException("Jwt:Key is not configured.");
         var issuer = _configuration["Jwt:Issuer"] ?? "ECommerceApi";
         var audience = _configuration["Jwt:Audience"] ?? "ECommerceClient";
-        var expiryMinutes = int.TryParse(_configuration["Jwt:ExpiryMinutes"], out var exp) ? exp : 15;
+        var expiryMinutes = _jwtOptions.ExpiryMinutes;
 
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);

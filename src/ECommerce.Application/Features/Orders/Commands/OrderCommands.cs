@@ -1,5 +1,7 @@
+using ECommerce.Application.Common.Authorization;
 using ECommerce.Application.Common.Interfaces;
 using ECommerce.Application.Common.Models;
+using ECommerce.Application.Common.Options;
 using ECommerce.Application.Features.Orders.DTOs;
 using ECommerce.Domain.Entities;
 using ECommerce.Domain.Enums;
@@ -7,6 +9,7 @@ using ECommerce.Domain.ValueObjects;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace ECommerce.Application.Features.Orders.Commands;
 
@@ -52,19 +55,22 @@ public sealed class CheckoutCommandHandler : IRequestHandler<CheckoutCommand, Re
     private readonly ICurrentUserService _currentUserService;
     private readonly ICacheService _cacheService;
     private readonly TimeProvider _timeProvider;
+    private readonly PaymentOptions _paymentOptions;
 
     public CheckoutCommandHandler(
         IApplicationDbContext context,
         IInventoryService inventoryService,
         ICurrentUserService currentUserService,
         ICacheService cacheService,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IOptions<PaymentOptions> paymentOptions)
     {
         _context = context;
         _inventoryService = inventoryService;
         _currentUserService = currentUserService;
         _cacheService = cacheService;
         _timeProvider = timeProvider;
+        _paymentOptions = paymentOptions.Value;
     }
 
     public async Task<Result<OrderResponse>> Handle(CheckoutCommand request, CancellationToken cancellationToken)
@@ -72,7 +78,7 @@ public sealed class CheckoutCommandHandler : IRequestHandler<CheckoutCommand, Re
         var userId = _currentUserService.UserId;
         if (!userId.HasValue)
         {
-            return Result<OrderResponse>.Failure(Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result<OrderResponse>.Failure(Error.Unauthenticated);
         }
 
         var cart = await _context.Carts
@@ -100,7 +106,7 @@ public sealed class CheckoutCommandHandler : IRequestHandler<CheckoutCommand, Re
         var sortedItems = cart.Items.OrderBy(i => i.ProductId).ToList();
 
         var now = _timeProvider.GetUtcNow();
-        var paymentDeadline = now.AddMinutes(35);
+        var paymentDeadline = now.AddMinutes(_paymentOptions.PaymentDeadlineMinutes);
 
         // Begin database transaction for atomic checkout and inventory reservation
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
@@ -141,7 +147,7 @@ public sealed class CheckoutCommandHandler : IRequestHandler<CheckoutCommand, Re
             await transaction.CommitAsync(cancellationToken);
 
             // Invalidate Redis catalog cache
-            await _cacheService.IncrementVersionAsync("catalog:version", cancellationToken);
+            await _cacheService.IncrementVersionAsync(CatalogCacheKeys.VersionKey, cancellationToken);
 
             var response = order.ToResponse(Array.Empty<PaymentSummaryResponse>());
 
@@ -185,7 +191,7 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
         var userId = _currentUserService.UserId;
         if (!userId.HasValue)
         {
-            return Result.Failure(Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result.Failure(Error.Unauthenticated);
         }
 
         var order = await _context.Orders
@@ -197,7 +203,7 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
             return Result.Failure(Error.NotFound("Order.NotFound", "Order not found."));
         }
 
-        var isAdmin = _currentUserService.IsInRole("Admin");
+        var isAdmin = _currentUserService.IsInRole(UserRoles.Admin);
         if (!isAdmin && order.UserId != userId.Value)
         {
             return Result.Failure(Error.Forbidden("Order.Forbidden", "You do not have permission to cancel this order."));
@@ -223,7 +229,7 @@ public sealed class CancelOrderCommandHandler : IRequestHandler<CancelOrderComma
             await _context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
-            await _cacheService.IncrementVersionAsync("catalog:version", cancellationToken);
+            await _cacheService.IncrementVersionAsync(CatalogCacheKeys.VersionKey, cancellationToken);
 
             return Result.Success();
         }

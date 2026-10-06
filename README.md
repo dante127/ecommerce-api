@@ -115,6 +115,7 @@ Detailed rationale, trade-off analyses, and alternatives considered are document
 | [ADR-009](file:///d:/ForGitUploads/docs/adr/ADR-009-stripe-defense-in-depth-lifecycle.md) | Stripe Lifecycle & Webhooks | Synchronized expirations and safe late-payment refund flagging. |
 | [ADR-010](file:///d:/ForGitUploads/docs/adr/ADR-010-transactional-outbox-in-stretch.md) | Transactional Outbox Staging | Architectural plan for outbox worker with dead-letter queue in v1.1. |
 | [ADR-011](docs/adr/ADR-011-forwarded-header-trust-list.md) | Explicit Forwarded-Header Trust List | Only configured proxies may set client-identity headers; per-client rate limiting and client-IP logging work correctly behind a proxy. |
+| [ADR-012](docs/adr/ADR-012-handler-testability-seam.md) | Handler Testability Seam | Keep the direct `IApplicationDbContext`; test handler behaviour against real PostgreSQL via Testcontainers instead of abstracting for testability. |
 
 ---
 

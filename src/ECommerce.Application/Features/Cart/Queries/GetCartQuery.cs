@@ -26,7 +26,7 @@ public sealed class GetCartQueryHandler : IRequestHandler<GetCartQuery, Result<C
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Result<CartResponse>.Failure(Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result<CartResponse>.Failure(Error.Unauthenticated);
         }
 
         var userId = _currentUserService.UserId.Value;

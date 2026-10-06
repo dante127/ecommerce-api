@@ -22,8 +22,7 @@ public sealed class GetMeQueryHandler : IRequestHandler<GetMeQuery, Result<UserR
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Result<UserResponse>.Failure(
-                Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result<UserResponse>.Failure(Error.Unauthenticated);
         }
 
         return await _identityService.GetUserByIdAsync(_currentUserService.UserId.Value, cancellationToken);

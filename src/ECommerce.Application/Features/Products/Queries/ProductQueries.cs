@@ -2,10 +2,12 @@ using System.Security.Cryptography;
 using System.Text;
 using ECommerce.Application.Common.Interfaces;
 using ECommerce.Application.Common.Models;
+using ECommerce.Application.Common.Options;
 using ECommerce.Application.Features.Products.DTOs;
 using ECommerce.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace ECommerce.Application.Features.Products.Queries;
 
@@ -23,24 +25,25 @@ public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, 
 {
     private readonly IApplicationDbContext _context;
     private readonly ICacheService _cacheService;
+    private readonly CatalogOptions _catalogOptions;
 
-    public GetProductsQueryHandler(IApplicationDbContext context, ICacheService cacheService)
+    public GetProductsQueryHandler(IApplicationDbContext context, ICacheService cacheService, IOptions<CatalogOptions> catalogOptions)
     {
         _context = context;
         _cacheService = cacheService;
+        _catalogOptions = catalogOptions.Value;
     }
 
     public async Task<Result<PagedList<ProductResponse>>> Handle(GetProductsQuery request, CancellationToken cancellationToken)
     {
         // Paging is normalised before the cache key is built, so equivalent requests (page=0 and
         // page=1, pageSize=0 and pageSize=20) share one entry instead of two.
-        var page = request.Page > 0 ? request.Page : 1;
-        var pageSize = request.PageSize is > 0 and <= 100 ? request.PageSize : 20;
+        var (page, pageSize) = Paging.Normalize(request.Page, request.PageSize);
 
         // 1. Check Redis Cache
-        var version = await _cacheService.GetVersionAsync("catalog:version", cancellationToken);
+        var version = await _cacheService.GetVersionAsync(CatalogCacheKeys.VersionKey, cancellationToken);
         var canonicalKey = GenerateCanonicalQueryHash(request with { Page = page, PageSize = pageSize });
-        var cacheKey = $"catalog:v{version}:products:{canonicalKey}";
+        var cacheKey = CatalogCacheKeys.Products(version, canonicalKey);
 
         var cachedResult = await _cacheService.GetAsync<PagedList<ProductResponse>>(cacheKey, cancellationToken);
         if (cachedResult != null)
@@ -123,7 +126,7 @@ public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, 
             var availability = p.Stock switch
             {
                 <= 0 => AvailabilityStatus.OutOfStock,
-                <= 5 => AvailabilityStatus.LowStock,
+                var s when s <= _catalogOptions.LowStockThreshold => AvailabilityStatus.LowStock,
                 _ => AvailabilityStatus.InStock
             };
 
@@ -172,10 +175,12 @@ public sealed record GetProductByIdQuery(Guid Id) : IRequest<Result<ProductDetai
 public sealed class GetProductByIdQueryHandler : IRequestHandler<GetProductByIdQuery, Result<ProductDetailResponse>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly CatalogOptions _catalogOptions;
 
-    public GetProductByIdQueryHandler(IApplicationDbContext context)
+    public GetProductByIdQueryHandler(IApplicationDbContext context, IOptions<CatalogOptions> catalogOptions)
     {
         _context = context;
+        _catalogOptions = catalogOptions.Value;
     }
 
     public async Task<Result<ProductDetailResponse>> Handle(GetProductByIdQuery request, CancellationToken cancellationToken)
@@ -196,7 +201,7 @@ public sealed class GetProductByIdQueryHandler : IRequestHandler<GetProductByIdQ
         var availability = stock switch
         {
             <= 0 => AvailabilityStatus.OutOfStock,
-            <= 5 => AvailabilityStatus.LowStock,
+            var s when s <= _catalogOptions.LowStockThreshold => AvailabilityStatus.LowStock,
             _ => AvailabilityStatus.InStock
         };
 

@@ -1,3 +1,4 @@
+using ECommerce.Application.Common.Authorization;
 using ECommerce.Application.Common.Interfaces;
 using ECommerce.Application.Common.Models;
 using ECommerce.Application.Features.Orders.DTOs;
@@ -25,11 +26,10 @@ public sealed class GetOrdersQueryHandler : IRequestHandler<GetOrdersQuery, Resu
         var userId = _currentUserService.UserId;
         if (!userId.HasValue)
         {
-            return Result<PagedList<OrderSummaryResponse>>.Failure(
-                Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result<PagedList<OrderSummaryResponse>>.Failure(Error.Unauthenticated);
         }
 
-        var isAdmin = _currentUserService.IsInRole("Admin");
+        var isAdmin = _currentUserService.IsInRole(UserRoles.Admin);
 
         var query = _context.Orders.AsNoTracking();
         if (!isAdmin)
@@ -40,8 +40,7 @@ public sealed class GetOrdersQueryHandler : IRequestHandler<GetOrdersQuery, Resu
         query = query.OrderByDescending(o => o.CreatedAt);
 
         var totalCount = await query.CountAsync(cancellationToken);
-        var page = request.Page > 0 ? request.Page : 1;
-        var pageSize = request.PageSize is > 0 and <= 100 ? request.PageSize : 20;
+        var (page, pageSize) = Paging.Normalize(request.Page, request.PageSize);
 
         var items = await query
             .Skip((page - 1) * pageSize)
@@ -79,8 +78,7 @@ public sealed class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery
         var userId = _currentUserService.UserId;
         if (!userId.HasValue)
         {
-            return Result<OrderResponse>.Failure(
-                Error.Unauthorized("Auth.Unauthorized", "User is not authenticated."));
+            return Result<OrderResponse>.Failure(Error.Unauthenticated);
         }
 
         var order = await _context.Orders
@@ -95,7 +93,7 @@ public sealed class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery
                 Error.NotFound("Order.NotFound", "Order not found."));
         }
 
-        var isAdmin = _currentUserService.IsInRole("Admin");
+        var isAdmin = _currentUserService.IsInRole(UserRoles.Admin);
         if (!isAdmin && order.UserId != userId.Value)
         {
             return Result<OrderResponse>.Failure(

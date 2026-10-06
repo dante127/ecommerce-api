@@ -1,9 +1,12 @@
+using ECommerce.Application.Common.Authorization;
 using ECommerce.Application.Common.Interfaces;
 using ECommerce.Application.Common.Models;
+using ECommerce.Application.Common.Options;
 using ECommerce.Application.Features.Auth.DTOs;
 using ECommerce.Domain.Entities;
 using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.Options;
 
 namespace ECommerce.Application.Features.Auth.Commands.Register;
 
@@ -45,17 +48,20 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
     private readonly ITokenService _tokenService;
     private readonly IApplicationDbContext _context;
     private readonly TimeProvider _timeProvider;
+    private readonly JwtOptions _jwtOptions;
 
     public RegisterCommandHandler(
         IIdentityService _identityService,
         ITokenService tokenService,
         IApplicationDbContext context,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IOptions<JwtOptions> jwtOptions)
     {
         this._identityService = _identityService;
         _tokenService = tokenService;
         _context = context;
         _timeProvider = timeProvider;
+        _jwtOptions = jwtOptions.Value;
     }
 
     public async Task<Result<AuthResponse>> Handle(RegisterCommand request, CancellationToken cancellationToken)
@@ -66,7 +72,7 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
             request.Password,
             request.FirstName,
             request.LastName,
-            "Customer",
+            UserRoles.Customer,
             cancellationToken);
 
         if (createResult.IsFailure)
@@ -83,7 +89,7 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
         var hashedRefreshToken = _tokenService.HashToken(rawRefreshToken);
 
         var now = _timeProvider.GetUtcNow();
-        var expiresAt = now.AddDays(7);
+        var expiresAt = now.AddDays(_jwtOptions.RefreshTokenExpiryDays);
 
         // A new sign-in starts a new token family.
         var refreshTokenEntity = ECommerce.Domain.Entities.RefreshToken.Create(
@@ -95,6 +101,6 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
         await _context.RefreshTokens.AddAsync(refreshTokenEntity, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result<AuthResponse>.Success(new AuthResponse(accessToken, rawRefreshToken, 900));
+        return Result<AuthResponse>.Success(new AuthResponse(accessToken, rawRefreshToken, _jwtOptions.ExpiryMinutes * 60));
     }
 }
