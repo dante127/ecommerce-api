@@ -21,7 +21,11 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         Exception exception,
         CancellationToken cancellationToken)
     {
-        _logger.LogError(exception, "Unhandled exception occurred: {Message}", exception.Message);
+        // Client mistakes (validation) are information, not incidents; logging them as errors
+        // buries real failures in alert noise.
+        var logLevel = exception is ValidationException ? LogLevel.Information : LogLevel.Error;
+        _logger.Log(logLevel, exception, "Unhandled exception while handling {Method} {Path}",
+            httpContext.Request.Method, httpContext.Request.Path);
 
         var (statusCode, title, detail, extensions) = exception switch
         {

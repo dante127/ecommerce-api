@@ -147,6 +147,7 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Databas
 }
 
 // Pipeline Configuration
+app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
 app.UseForwardedHeaders();
 
@@ -155,6 +156,10 @@ app.UseMiddleware<CorrelationIdMiddleware>();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwaggerDocumentation();
+}
+else
+{
+    app.UseHsts();
 }
 
 app.UseHttpsRedirection();

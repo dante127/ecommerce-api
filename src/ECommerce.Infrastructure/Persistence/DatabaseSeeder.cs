@@ -22,71 +22,68 @@ public static class DatabaseSeeder
     {
         var now = timeProvider.GetUtcNow();
 
-        try
+        // Seeding failures propagate: StartupTasks logs and rethrows them, so a half-seeded
+        // database can never be announced as ready (roles missing would silently block all
+        // registrations).
+
+        // 1. Roles — reference data. Registration assigns one of these on sign-up and fails
+        //    loudly when the role is missing, so they are seeded unconditionally.
+        string[] roles = [UserRoles.Admin, UserRoles.Customer];
+        foreach (var role in roles)
         {
-            // 1. Roles — reference data. Registration assigns one of these on sign-up and fails
-            //    loudly when the role is missing, so they are seeded unconditionally.
-            string[] roles = [UserRoles.Admin, UserRoles.Customer];
-            foreach (var role in roles)
+            if (!await roleManager.RoleExistsAsync(role))
             {
-                if (!await roleManager.RoleExistsAsync(role))
-                {
-                    await roleManager.CreateAsync(new IdentityRole<Guid> { Name = role, NormalizedName = role.ToUpperInvariant() });
-                    logger.LogInformation("Seeded role: {Role}", role);
-                }
-            }
-
-            // 2. Demo/bootstrap accounts. No password literal lives in this repository: outside
-            //    Development the accounts are only created when a password is supplied through
-            //    configuration (Seed:AdminPassword / Seed:CustomerPassword), and in Development an
-            //    unconfigured password is generated and logged once. A deployment that enables
-            //    Database:AutoMigrate therefore cannot mint a publicly known admin account.
-            await EnsureDemoAccountAsync(userManager, logger, configuration, isDevelopment, now,
-                emailConfigKey: "Seed:AdminEmail", defaultEmail: "admin@ecommerce.com",
-                passwordConfigKey: "Seed:AdminPassword",
-                firstName: "System", lastName: "Administrator", role: "Admin");
-
-            await EnsureDemoAccountAsync(userManager, logger, configuration, isDevelopment, now,
-                emailConfigKey: "Seed:CustomerEmail", defaultEmail: "customer@ecommerce.com",
-                passwordConfigKey: "Seed:CustomerPassword",
-                firstName: "Jane", lastName: "Customer", role: "Customer");
-
-            // 3. Seed Categories
-            if (!await context.Categories.AnyAsync())
-            {
-                var electronics = Category.Create("Electronics", "electronics", null, now);
-                var computers = Category.Create("Computers", "computers", electronics.Id, now);
-                var accessories = Category.Create("Accessories", "accessories", electronics.Id, now);
-
-                await context.Categories.AddRangeAsync(electronics, computers, accessories);
-                await context.SaveChangesAsync();
-                logger.LogInformation("Seeded initial categories.");
-
-                // 4. Seed Products & InventoryItems
-                if (!await context.Products.AnyAsync())
-                {
-                    var laptop = Product.Create("TECH-LAP-001", "Gaming Laptop Pro", "High-performance gaming laptop with 32GB RAM", 1499.99m, computers.Id, now);
-                    var mouse = Product.Create("TECH-MOU-001", "Wireless Ergonomic Mouse", "Precision optical mouse with Bluetooth", 49.99m, accessories.Id, now);
-                    var keyboard = Product.Create("TECH-KEY-001", "Mechanical Keyboard", "RGB backlit mechanical keyboard", 119.99m, accessories.Id, now);
-                    var limitedGpu = Product.Create("TECH-GPU-001", "Limited Edition GPU", "Ultra-rare GPU for concurrency benchmark testing", 899.99m, computers.Id, now);
-
-                    await context.Products.AddRangeAsync(laptop, mouse, keyboard, limitedGpu);
-
-                    var laptopStock = InventoryItem.Create(laptop.Id, 20, now);
-                    var mouseStock = InventoryItem.Create(mouse.Id, 100, now);
-                    var keyboardStock = InventoryItem.Create(keyboard.Id, 50, now);
-                    var limitedGpuStock = InventoryItem.Create(limitedGpu.Id, 1, now); // Stock = 1 for high-contention testing
-
-                    await context.InventoryItems.AddRangeAsync(laptopStock, mouseStock, keyboardStock, limitedGpuStock);
-                    await context.SaveChangesAsync();
-
-                    logger.LogInformation("Seeded initial products and inventory.");
-                }
+                await roleManager.CreateAsync(new IdentityRole<Guid> { Name = role, NormalizedName = role.ToUpperInvariant() });
+                logger.LogInformation("Seeded role: {Role}", role);
             }
         }
-        catch (Exception ex)
+
+        // 2. Demo/bootstrap accounts. No password literal lives in this repository: outside
+        //    Development the accounts are only created when a password is supplied through
+        //    configuration (Seed:AdminPassword / Seed:CustomerPassword), and in Development an
+        //    unconfigured password is generated and logged once. A deployment that enables
+        //    Database:AutoMigrate therefore cannot mint a publicly known admin account.
+        await EnsureDemoAccountAsync(userManager, logger, configuration, isDevelopment, now,
+            emailConfigKey: "Seed:AdminEmail", defaultEmail: "admin@ecommerce.com",
+            passwordConfigKey: "Seed:AdminPassword",
+            firstName: "System", lastName: "Administrator", role: UserRoles.Admin);
+
+        await EnsureDemoAccountAsync(userManager, logger, configuration, isDevelopment, now,
+            emailConfigKey: "Seed:CustomerEmail", defaultEmail: "customer@ecommerce.com",
+            passwordConfigKey: "Seed:CustomerPassword",
+            firstName: "Jane", lastName: "Customer", role: UserRoles.Customer);
+
+        // 3. Seed Categories
+        if (!await context.Categories.AnyAsync())
         {
-            logger.LogError(ex, "An error occurred while seeding the database.");
+            var electronics = Category.Create("Electronics", "electronics", null, now);
+            var computers = Category.Create("Computers", "computers", electronics.Id, now);
+            var accessories = Category.Create("Accessories", "accessories", electronics.Id, now);
+
+            context.Categories.AddRange(electronics, computers, accessories);
+            await context.SaveChangesAsync();
+            logger.LogInformation("Seeded initial categories.");
+
+            // 4. Seed Products & InventoryItems
+            if (!await context.Products.AnyAsync())
+            {
+                var laptop = Product.Create("TECH-LAP-001", "Gaming Laptop Pro", "High-performance gaming laptop with 32GB RAM", 1499.99m, computers.Id, now);
+                var mouse = Product.Create("TECH-MOU-001", "Wireless Ergonomic Mouse", "Precision optical mouse with Bluetooth", 49.99m, accessories.Id, now);
+                var keyboard = Product.Create("TECH-KEY-001", "Mechanical Keyboard", "RGB backlit mechanical keyboard", 119.99m, accessories.Id, now);
+                var limitedGpu = Product.Create("TECH-GPU-001", "Limited Edition GPU", "Ultra-rare GPU for concurrency benchmark testing", 899.99m, computers.Id, now);
+
+                context.Products.AddRange(laptop, mouse, keyboard, limitedGpu);
+
+                var laptopStock = InventoryItem.Create(laptop.Id, 20, now);
+                var mouseStock = InventoryItem.Create(mouse.Id, 100, now);
+                var keyboardStock = InventoryItem.Create(keyboard.Id, 50, now);
+                var limitedGpuStock = InventoryItem.Create(limitedGpu.Id, 1, now); // Stock = 1 for high-contention testing
+
+                context.InventoryItems.AddRange(laptopStock, mouseStock, keyboardStock, limitedGpuStock);
+                await context.SaveChangesAsync();
+
+                logger.LogInformation("Seeded initial products and inventory.");
+            }
         }
     }
 

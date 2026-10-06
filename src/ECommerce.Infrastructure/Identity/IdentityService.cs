@@ -2,6 +2,7 @@ using ECommerce.Application.Common.Interfaces;
 using ECommerce.Application.Common.Models;
 using ECommerce.Application.Features.Auth.DTOs;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 
 namespace ECommerce.Infrastructure.Identity;
 
@@ -10,15 +11,18 @@ public sealed class IdentityService : IIdentityService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<IdentityService> _logger;
 
     public IdentityService(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ILogger<IdentityService> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _timeProvider = timeProvider;
+        _logger = logger;
     }
 
     public async Task<Result<Guid>> CreateUserAsync(
@@ -86,6 +90,9 @@ public sealed class IdentityService : IIdentityService
 
         if (signInResult.IsLockedOut)
         {
+            // A security-relevant event: without this line, repeated lockouts of one account are
+            // invisible everywhere but the database.
+            _logger.LogWarning("Account {UserId} was locked out after repeated failed sign-ins.", user.Id);
             return Result<(Guid, string, List<string>)>.Failure(
                 Error.Unauthorized("Auth.AccountLocked", "Account is temporarily locked out. Try again later."));
         }
