@@ -19,7 +19,7 @@ RUN dotnet restore ECommerce.sln
 COPY . .
 
 # Build and publish
-RUN dotnet publish src/ECommerce.Api/ECommerce.Api.csproj -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish src/ECommerce.Api/ECommerce.Api.csproj -c Release -o /app/publish --no-restore /p:UseAppHost=false
 
 # Stage 2: Runtime
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

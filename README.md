@@ -1,11 +1,11 @@
 # Production E-Commerce REST API (.NET 10)
 
-[![CI Build & Test](https://github.com/your-org/ecommerce-net10/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/ecommerce-net10/actions)
+[![CI Build & Test](https://github.com/dante127/ecommerce-api/actions/workflows/ci.yml/badge.svg)](https://github.com/dante127/ecommerce-api/actions)
 ![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)
 ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-336791?logo=postgresql)
 ![Redis 7](https://img.shields.io/badge/Redis-7-DC382D?logo=redis)
 ![Stripe](https://img.shields.io/badge/Stripe-v52-635BFF?logo=stripe)
-![Tests](https://img.shields.io/badge/Tests-69%20Passed-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-98%20Passed-brightgreen)
 
 A production-grade, high-performance E-Commerce REST API engineered in **.NET 10** demonstrating senior-level backend design: **Clean Architecture**, **CQRS with MediatR**, **Atomic Concurrency Control**, **Stripe Checkout & Idempotent Webhooks**, **Versioned Redis Caching**, and **Automated Concurrency Testing via Testcontainers**.
 
@@ -40,7 +40,7 @@ graph TD
         Aggregates[Aggregates: Order, Product, Cart, Payment]
         Entities[Entities: InventoryItem, RefreshToken, Category]
         ValueObjects[Value Objects: Address]
-        DomainEvents[Domain Events & State Machines]
+        StateMachines[State Machines]
     end
 
     AppLayer -->|Service Interfaces| InfraLayer[ECommerce.Infrastructure]
@@ -100,22 +100,23 @@ graph TD
 
 ## 📑 Architecture Decision Records (ADRs)
 
-Detailed rationale, trade-off analyses, and alternatives considered are documented in the [ADR Directory](file:///d:/ForGitUploads/docs/adr/README.md):
+Detailed rationale, trade-off analyses, and alternatives considered are documented in the [ADR Directory](docs/adr/README.md):
 
 | ADR | Title | Summary |
 | :--- | :--- | :--- |
-| [ADR-001](file:///d:/ForGitUploads/docs/adr/ADR-001-clean-architecture.md) | Clean Architecture | 4-layer separation enforcing inward dependency flow. |
-| [ADR-002](file:///d:/ForGitUploads/docs/adr/ADR-002-direct-dbcontext-cqrs.md) | Direct `DbContext` in CQRS | Rejection of generic repository abstraction for native EF Core power. |
-| [ADR-003](file:///d:/ForGitUploads/docs/adr/ADR-003-atomic-conditional-inventory-update.md) | Atomic Conditional UPDATE | Zero false concurrency conflicts & deterministic sort deadlock prevention. |
-| [ADR-004](file:///d:/ForGitUploads/docs/adr/ADR-004-separate-inventory-item-table.md) | Decoupled `InventoryItem` | Isolates high-volume checkout writes from admin `xmin` tokens. |
-| [ADR-005](file:///d:/ForGitUploads/docs/adr/ADR-005-postgresql-xmin-concurrency-tokens.md) | PostgreSQL `xmin` Tokens | Native MVCC row versioning for admin product edits and order states. |
-| [ADR-006](file:///d:/ForGitUploads/docs/adr/ADR-006-versioned-redis-cache-keys.md) | Versioned Redis Keys | $O(1)$ atomic cache invalidation with coarse availability flags. |
-| [ADR-007](file:///d:/ForGitUploads/docs/adr/ADR-007-payment-one-to-many-partial-unique-index.md) | 1:N Payment Relationship | Partial unique index (`WHERE Status = 'Pending'`) prevents duplicate charges. |
-| [ADR-008](file:///d:/ForGitUploads/docs/adr/ADR-008-refresh-token-grace-window.md) | Refresh Token Grace Window | 10s grace window resolves parallel tab token refresh race conditions. |
-| [ADR-009](file:///d:/ForGitUploads/docs/adr/ADR-009-stripe-defense-in-depth-lifecycle.md) | Stripe Lifecycle & Webhooks | Synchronized expirations and safe late-payment refund flagging. |
-| [ADR-010](file:///d:/ForGitUploads/docs/adr/ADR-010-transactional-outbox-in-stretch.md) | Transactional Outbox Staging | Architectural plan for outbox worker with dead-letter queue in v1.1. |
+| [ADR-001](docs/adr/ADR-001-clean-architecture.md) | Clean Architecture | 4-layer separation enforcing inward dependency flow. |
+| [ADR-002](docs/adr/ADR-002-direct-dbcontext-cqrs.md) | Direct `DbContext` in CQRS | Rejection of generic repository abstraction for native EF Core power. |
+| [ADR-003](docs/adr/ADR-003-atomic-conditional-inventory-update.md) | Atomic Conditional UPDATE | Zero false concurrency conflicts & deterministic sort deadlock prevention. |
+| [ADR-004](docs/adr/ADR-004-separate-inventory-item-table.md) | Decoupled `InventoryItem` | Isolates high-volume checkout writes from admin `xmin` tokens. |
+| [ADR-005](docs/adr/ADR-005-postgresql-xmin-concurrency-tokens.md) | PostgreSQL `xmin` Tokens | Native MVCC row versioning for admin product edits and order states. |
+| [ADR-006](docs/adr/ADR-006-versioned-redis-cache-keys.md) | Versioned Redis Keys | $O(1)$ atomic cache invalidation with coarse availability flags. |
+| [ADR-007](docs/adr/ADR-007-payment-one-to-many-partial-unique-index.md) | 1:N Payment Relationship | Partial unique index (`WHERE Status = 'Pending'`) prevents duplicate charges. |
+| [ADR-008](docs/adr/ADR-008-refresh-token-grace-window.md) | Refresh Token Grace Window | 10s grace window resolves parallel tab token refresh race conditions. |
+| [ADR-009](docs/adr/ADR-009-stripe-defense-in-depth-lifecycle.md) | Stripe Lifecycle & Webhooks | Synchronized expirations and safe late-payment refund flagging. |
+| [ADR-010](docs/adr/ADR-010-transactional-outbox-in-stretch.md) | Transactional Outbox Staging | Architectural plan for outbox worker with dead-letter queue in v1.1. |
 | [ADR-011](docs/adr/ADR-011-forwarded-header-trust-list.md) | Explicit Forwarded-Header Trust List | Only configured proxies may set client-identity headers; per-client rate limiting and client-IP logging work correctly behind a proxy. |
 | [ADR-012](docs/adr/ADR-012-handler-testability-seam.md) | Handler Testability Seam | Keep the direct `IApplicationDbContext`; test handler behaviour against real PostgreSQL via Testcontainers instead of abstracting for testability. |
+| [ADR-013](docs/adr/ADR-013-crash-consistent-checkout-sessions.md) | Crash-Consistent Checkout Sessions | Stripe idempotency keys plus webhook adoption of orphaned sessions resolve the payment-persistence gap without an outbox. |
 
 ---
 
@@ -144,7 +145,7 @@ Detailed rationale, trade-off analyses, and alternatives considered are document
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/ecommerce-net10.git
+git clone https://github.com/dante127/ecommerce-api.git
 cd ecommerce-net10
 
 # Start PostgreSQL and Redis alongside the API
@@ -189,7 +190,7 @@ The repository contains **no committed passwords**. Roles and the demo catalogue
 
 ## 🧪 Automated Testing Suite
 
-The solution contains **69 automated tests** covering domain invariants, CQRS validation rules, and full HTTP concurrency integration tests.
+The solution contains **98 automated tests** covering domain invariants, CQRS validation rules, security behaviors, and full HTTP concurrency integration tests.
 
 > `ECommerce.Api.IntegrationTests` requires a running Docker daemon: it starts PostgreSQL 17 and Redis 7 through Testcontainers. If the containers cannot start, those tests fail with an explanatory message instead of passing silently, and CI fails too. To run only the unit tests: `dotnet test tests/ECommerce.Domain.UnitTests` and `dotnet test tests/ECommerce.Application.UnitTests`.
 

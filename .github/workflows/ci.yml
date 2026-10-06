@@ -24,12 +24,12 @@ jobs:
         run: dotnet restore ECommerce.sln
 
       - name: Build Solution
-        run: dotnet build ECommerce.sln -c Release --no-restore
+        run: dotnet build ECommerce.sln -c Release --no-restore -p:TreatWarningsAsErrors=true
 
       - name: Run Unit Tests
         run: |
-          dotnet test tests/ECommerce.Domain.UnitTests/ECommerce.Domain.UnitTests.csproj -c Release --no-build --verbosity normal
-          dotnet test tests/ECommerce.Application.UnitTests/ECommerce.Application.UnitTests.csproj -c Release --no-build --verbosity normal
+          dotnet test tests/ECommerce.Domain.UnitTests/ECommerce.Domain.UnitTests.csproj -c Release --no-build --verbosity normal --collect "XPlat Code Coverage" --results-directory ./TestResults
+          dotnet test tests/ECommerce.Application.UnitTests/ECommerce.Application.UnitTests.csproj -c Release --no-build --verbosity normal --collect "XPlat Code Coverage" --results-directory ./TestResults
 
       - name: Run Integration Tests
         run: dotnet test tests/ECommerce.Api.IntegrationTests/ECommerce.Api.IntegrationTests.csproj -c Release --no-build --verbosity normal
