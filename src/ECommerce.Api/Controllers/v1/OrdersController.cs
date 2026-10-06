@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using ECommerce.Application.Common.Authorization;
 using ECommerce.Application.Common.Models;
 using ECommerce.Application.Features.Orders.Commands;
 using ECommerce.Application.Features.Orders.DTOs;
@@ -69,6 +70,20 @@ public sealed class OrdersController : BaseApiController
     public async Task<IActionResult> CancelOrder(Guid id, [FromBody] CancelOrderRequest? request, CancellationToken cancellationToken)
     {
         var command = new CancelOrderCommand(id, request?.Reason);
+        var result = await Sender.Send(command, cancellationToken);
+        return HandleResult(result);
+    }
+
+    [HttpPost("{id:guid}/status")]
+    [Authorize(Roles = UserRoles.Admin)]
+    [ProducesResponseType(typeof(OrderResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TransitionStatus(Guid id, [FromBody] TransitionOrderStatusRequest request, CancellationToken cancellationToken)
+    {
+        var command = new TransitionOrderStatusCommand(id, request.Status);
         var result = await Sender.Send(command, cancellationToken);
         return HandleResult(result);
     }

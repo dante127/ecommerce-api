@@ -1,3 +1,5 @@
+using ECommerce.Domain.Enums;
+
 namespace ECommerce.Application.Features.Orders.DTOs;
 
 public sealed record AddressDto(
@@ -10,6 +12,8 @@ public sealed record AddressDto(
 public sealed record CheckoutRequest(AddressDto ShippingAddress);
 
 public sealed record CancelOrderRequest(string? Reason);
+
+public sealed record TransitionOrderStatusRequest(OrderStatus Status);
 
 public sealed record OrderItemResponse(
     Guid ProductId,
