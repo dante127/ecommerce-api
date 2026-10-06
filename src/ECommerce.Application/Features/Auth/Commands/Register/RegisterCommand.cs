@@ -98,7 +98,7 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
             hashedRefreshToken,
             expiresAt,
             now);
-        await _context.RefreshTokens.AddAsync(refreshTokenEntity, cancellationToken);
+        _context.RefreshTokens.Add(refreshTokenEntity);
         await _context.SaveChangesAsync(cancellationToken);
 
         return Result<AuthResponse>.Success(new AuthResponse(accessToken, rawRefreshToken, _jwtOptions.ExpiryMinutes * 60));

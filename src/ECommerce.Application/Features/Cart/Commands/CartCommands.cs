@@ -65,7 +65,7 @@ public sealed class AddItemToCartCommandHandler : IRequestHandler<AddItemToCartC
         if (cart == null)
         {
             cart = ECommerce.Domain.Entities.Cart.Create(userId, now);
-            await _context.Carts.AddAsync(cart, cancellationToken);
+            _context.Carts.Add(cart);
         }
 
         // Validate the quantity the line WOULD hold, not just the increment: adding to an

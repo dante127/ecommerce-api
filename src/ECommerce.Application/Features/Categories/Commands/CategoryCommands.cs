@@ -44,7 +44,7 @@ public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategor
         }
 
         var category = Category.Create(request.Name, request.Slug, request.ParentId, _timeProvider.GetUtcNow());
-        await _context.Categories.AddAsync(category, cancellationToken);
+        _context.Categories.Add(category);
         await _context.SaveChangesAsync(cancellationToken);
 
         // Invalidate catalog cache via atomic Redis version increment

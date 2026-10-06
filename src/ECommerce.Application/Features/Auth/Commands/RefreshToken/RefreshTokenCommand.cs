@@ -150,7 +150,7 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
             newExpiry,
             now);
 
-        await _context.RefreshTokens.AddAsync(replacement, cancellationToken);
+        _context.RefreshTokens.Add(replacement);
         await _context.SaveChangesAsync(cancellationToken);
 
         var newTokens = await IssueNewTokensAsync(ownerId, newRawToken, cancellationToken);

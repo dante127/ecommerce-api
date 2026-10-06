@@ -69,8 +69,8 @@ public sealed class CreateProductCommandHandler : IRequestHandler<CreateProductC
         var product = Product.Create(request.Sku, request.Name, request.Description, request.Price, request.CategoryId, now);
         var inventory = InventoryItem.Create(product.Id, request.InitialStock, now);
 
-        await _context.Products.AddAsync(product, cancellationToken);
-        await _context.InventoryItems.AddAsync(inventory, cancellationToken);
+        _context.Products.Add(product);
+        _context.InventoryItems.Add(inventory);
         await _context.SaveChangesAsync(cancellationToken);
 
         // Invalidate Redis catalog cache via version counter
