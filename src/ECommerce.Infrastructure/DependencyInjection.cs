@@ -156,6 +156,7 @@ public static class DependencyInjection
 
         // 6. Background Services
         services.AddHostedService<BackgroundJobs.OrderExpirationBackgroundService>();
+        services.AddHostedService<BackgroundJobs.DataRetentionBackgroundService>();
 
         return services;
     }
