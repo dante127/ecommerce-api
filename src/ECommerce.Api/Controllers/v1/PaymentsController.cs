@@ -87,7 +87,8 @@ public sealed class PaymentsController : BaseApiController
             webhookEvent.EventId,
             webhookEvent.EventType,
             webhookEvent.SessionId,
-            webhookEvent.PaymentIntentId);
+            webhookEvent.PaymentIntentId,
+            webhookEvent.OrderIdFromMetadata);
 
         var result = await Sender.Send(command, cancellationToken);
 

@@ -145,7 +145,8 @@ public sealed record ProcessWebhookCommand(
     string EventId,
     string EventType,
     string? SessionId,
-    string? PaymentIntentId) : IRequest<Result>;
+    string? PaymentIntentId,
+    string? OrderIdFromMetadata = null) : IRequest<Result>;
 
 public sealed class ProcessWebhookCommandHandler : IRequestHandler<ProcessWebhookCommand, Result>
 {
@@ -188,6 +189,31 @@ public sealed class ProcessWebhookCommandHandler : IRequestHandler<ProcessWebhoo
                 var payment = await _context.Payments
                     .Include(p => p.Order)
                     .FirstOrDefaultAsync(p => p.StripeSessionId == request.SessionId, cancellationToken);
+
+                // Crash-consistency adoption: if a checkout session was created but the process
+                // died before the Payment row was persisted, the customer can still pay that
+                // orphaned session. The session carries our order_id metadata, so the webhook can
+                // reconstruct the missing payment row instead of dropping the money state.
+                if (payment == null && Guid.TryParse(request.OrderIdFromMetadata, out var adoptedOrderId))
+                {
+                    var adoptedOrder = await _context.Orders
+                        .FirstOrDefaultAsync(o => o.Id == adoptedOrderId, cancellationToken);
+
+                    if (adoptedOrder != null)
+                    {
+                        payment = Payment.Create(
+                            adoptedOrder.Id,
+                            request.SessionId!,
+                            $"https://checkout.stripe.com/pay/{request.SessionId}",
+                            adoptedOrder.TotalAmount,
+                            now,
+                            now);
+                        _context.Payments.Add(payment);
+                        _logger.LogWarning(
+                            "Adopted orphaned Stripe session {SessionId} for order {OrderId} via webhook metadata.",
+                            request.SessionId, adoptedOrder.Id);
+                    }
+                }
 
                 if (payment != null)
                 {

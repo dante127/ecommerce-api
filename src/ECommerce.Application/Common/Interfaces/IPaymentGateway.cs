@@ -6,7 +6,8 @@ public sealed record WebhookEventResult(
     string EventId,
     string EventType,
     string? SessionId,
-    string? PaymentIntentId);
+    string? PaymentIntentId,
+    string? OrderIdFromMetadata);
 
 public interface IPaymentGateway
 {
