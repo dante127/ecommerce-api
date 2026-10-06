@@ -114,6 +114,7 @@ Detailed rationale, trade-off analyses, and alternatives considered are document
 | [ADR-008](file:///d:/ForGitUploads/docs/adr/ADR-008-refresh-token-grace-window.md) | Refresh Token Grace Window | 10s grace window resolves parallel tab token refresh race conditions. |
 | [ADR-009](file:///d:/ForGitUploads/docs/adr/ADR-009-stripe-defense-in-depth-lifecycle.md) | Stripe Lifecycle & Webhooks | Synchronized expirations and safe late-payment refund flagging. |
 | [ADR-010](file:///d:/ForGitUploads/docs/adr/ADR-010-transactional-outbox-in-stretch.md) | Transactional Outbox Staging | Architectural plan for outbox worker with dead-letter queue in v1.1. |
+| [ADR-011](docs/adr/ADR-011-forwarded-header-trust-list.md) | Explicit Forwarded-Header Trust List | Only configured proxies may set client-identity headers; per-client rate limiting and client-IP logging work correctly behind a proxy. |
 
 ---
 
@@ -136,14 +137,17 @@ Detailed rationale, trade-off analyses, and alternatives considered are document
 * [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 * [Docker Desktop](https://www.docker.com/) or Docker Engine
 
-### 1. Run with Docker Compose
+### 1. Run the local development stack
+
+`docker-compose.dev.yml` is a **local development environment only** — Development posture, placeholder JWT key, mock Stripe gateway. It is not a deployment artifact; production follows the [Deployment](#deployment) requirements.
+
 ```bash
 # Clone the repository
 git clone https://github.com/your-org/ecommerce-net10.git
 cd ecommerce-net10
 
-# Start PostgreSQL, Redis, Seq, and Mailpit
-docker-compose up -d
+# Start PostgreSQL and Redis alongside the API
+docker-compose -f docker-compose.dev.yml up -d
 ```
 
 ### 2. Run the API Locally
@@ -161,12 +165,19 @@ The API will be available at:
 * **Health Liveness**: `http://localhost:5000/health/live`
 * **Health Readiness**: `http://localhost:5000/health/ready`
 
-### 3. Seeded Test Credentials
+### 3. Seeded Accounts
 
-| Role | Email | Password |
-| :--- | :--- | :--- |
-| **Admin** | `admin@ecommerce.com` | `Admin123!#` |
-| **Customer** | `customer@ecommerce.com` | `Customer123!#` |
+The repository contains **no committed passwords**. Roles and the demo catalogue are always seeded; the demo accounts depend on configuration:
+
+| Configuration | Behavior |
+| :--- | :--- |
+| `Seed__AdminPassword` / `Seed__CustomerPassword` set | The account is created with that password (any environment). |
+| unset, **Development** | The account is created with a randomly generated password, logged once at startup. |
+| unset, **other environments** | The account is not created. |
+
+`Seed__AdminEmail` / `Seed__CustomerEmail` override the default addresses (`admin@ecommerce.com`, `customer@ecommerce.com`).
+
+> **Existing deployments:** databases seeded by an earlier version still contain the previously documented `admin@ecommerce.com` account. Rotate its password or delete the account.
 
 *Pre-seeded product for concurrency testing*:
 * **SKU**: `TECH-GPU-001`
@@ -192,6 +203,8 @@ The image is built from the `Dockerfile` (multi-stage build, non-root runtime us
 | `ConnectionStrings__DefaultConnection` | PostgreSQL. The committed value assumes a local server. |
 | `ConnectionStrings__Redis` | Redis. |
 | `ASPNETCORE_ENVIRONMENT` | `Production`. This is what disables the mock Stripe gateway and the placeholder JWT key. |
+| `ForwardedHeaders__KnownProxies__0`, `ForwardedHeaders__KnownNetworks__0` | Required behind a proxy or ingress: the proxy IPs/CIDRs allowed to set `X-Forwarded-For`/`X-Forwarded-Proto`. Only declared proxies are trusted, so rate limiting and logging resolve real client addresses (ADR-011). When set, the lists replace the loopback defaults entirely. |
+| `Seed__AdminPassword`, `Seed__CustomerPassword` | Optional. Outside Development the demo accounts are only created when these are set (see *Seeded Accounts*). |
 
 Then, once per environment:
 
@@ -209,7 +222,7 @@ dotnet ef database update --project src/ECommerce.Infrastructure --startup-proje
 > Design-time commands (`dotnet ef ...`) build the host, which runs the configuration guards. Set
 > `ASPNETCORE_ENVIRONMENT=Development` for them, or provide a real `Jwt__Key`.
 
-Health probes: `/health/live` (process) and `/health/ready` (PostgreSQL and Redis). TLS is expected to be terminated by a proxy or ingress; forwarded headers are already configured.
+Health probes: `/health/live` (process) and `/health/ready` (PostgreSQL and Redis). TLS is expected to be terminated by a proxy or ingress; declare that proxy via `ForwardedHeaders__KnownProxies` / `ForwardedHeaders__KnownNetworks` so client IPs — and per-IP rate limiting — remain correct (ADR-011).
 
 ```bash
 # Run all tests across the solution

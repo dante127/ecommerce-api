@@ -1,3 +1,10 @@
+# Local development environment only — this is not a deployment artifact.
+#
+# It runs the API in Development with the placeholder JWT signing key, the mock Stripe gateway
+# and auto-migrate-and-seed. None of that may ever face public traffic: production deployments
+# must follow the requirements in README.md (ASPNETCORE_ENVIRONMENT=Production, a real Jwt__Key,
+# real Stripe credentials, migrations applied deliberately, and a proxy-aware forwarded-header
+# trust list). The startup guards in AddInfrastructure reject this configuration outside Development.
 services:
   api:
     build:
@@ -17,6 +24,7 @@ services:
       - Jwt__Key=SuperSecretDevelopmentKeyForECommerceApiTestingOnlyMustBeLongerThan32Bytes!
       - Stripe__SecretKey=${STRIPE_SECRET_KEY:-sk_test_placeholder}
       - Stripe__WebhookSecret=${STRIPE_WEBHOOK_SECRET:-whsec_placeholder}
+      - Stripe__UseMockGateway=true
     depends_on:
       postgres:
         condition: service_healthy
