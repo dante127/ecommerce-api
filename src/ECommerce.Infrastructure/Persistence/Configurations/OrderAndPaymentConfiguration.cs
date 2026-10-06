@@ -46,6 +46,10 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(o => new { o.UserId, o.CreatedAt });
         builder.HasIndex(o => new { o.Status, o.CreatedAt });
 
+        // The expiration sweep filters Status == Pending && PaymentDeadline <= now every cycle;
+        // without the deadline in the key it falls back to the Status prefix plus a filter.
+        builder.HasIndex(o => new { o.Status, o.PaymentDeadline });
+
         builder.HasMany(o => o.Items)
             .WithOne()
             .HasForeignKey(i => i.OrderId)
