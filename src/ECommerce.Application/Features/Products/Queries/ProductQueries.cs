@@ -149,7 +149,7 @@ public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, 
         // ranges produce an unbounded, caller-controlled key space - one entry per arbitrary
         // permutation - so caching those would let crawler or hostile traffic grow Redis
         // without limit. Those requests are served straight from the database. See ADR-006.
-        if (IsCacheableShape(request))
+        if (IsCacheableShape(request, page))
         {
             await _cacheService.SetAsync(cacheKey, pagedList, TimeSpan.FromMinutes(5), cancellationToken);
         }
@@ -157,10 +157,18 @@ public sealed class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, 
         return Result<PagedList<ProductResponse>>.Success(pagedList);
     }
 
-    private static bool IsCacheableShape(GetProductsQuery query)
+    /// <summary>
+    /// Deep pages are served from the database: page is unbounded client input, so caching every
+    /// page would still let crawler traffic grow Redis one entry per page. Only the hot range
+    /// where real browsing happens is cached (ADR-006's bounded key space, now actually bounded).
+    /// </summary>
+    internal const int MaxCachedPage = 10;
+
+    private static bool IsCacheableShape(GetProductsQuery query, int normalizedPage)
         => string.IsNullOrWhiteSpace(query.Search)
            && !query.MinPrice.HasValue
-           && !query.MaxPrice.HasValue;
+           && !query.MaxPrice.HasValue
+           && normalizedPage <= MaxCachedPage;
 
     private static string GenerateCanonicalQueryHash(GetProductsQuery q)
     {
