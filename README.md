@@ -216,6 +216,10 @@ dotnet ef database update --project src/ECommerce.Infrastructure --startup-proje
 # ...or let the first boot do both with: Database__AutoMigrate=true
 ```
 
+> **Running multiple replicas?** Do not enable `Database__AutoMigrate` on every instance: concurrent
+> starts race on the migrations history table. Apply migrations once (deployment job or init
+> container) *before* the replicas start, and leave auto-migration off in the replica configuration.
+
 > **Seed the roles.** `DatabaseSeeder` creates `Admin` and `Customer`. Registration assigns a role
 > on sign-up and fails loudly with `Auth.RoleAssignmentFailed` when the role is missing, so a
 > database without seeded roles cannot accept registrations at all.

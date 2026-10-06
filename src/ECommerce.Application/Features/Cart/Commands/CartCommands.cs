@@ -82,7 +82,7 @@ public sealed class AddItemToCartCommandHandler : IRequestHandler<AddItemToCartC
 
         // Projected straight from the database: no tracked graph re-read, and an explicit
         // order so the response is deterministic.
-        var items = await _context.LoadPurchasableLinesAsync(cart.Id, cancellationToken);
+        var items = await _context.LoadActiveLinesAsync(cart.Id, cancellationToken);
 
         return Result<CartResponse>.Success(new CartResponse(cart.Id, items, items.Sum(i => i.Subtotal)));
     }
@@ -156,7 +156,7 @@ public sealed class UpdateCartItemCommandHandler : IRequestHandler<UpdateCartIte
         cart.UpdateItemQuantity(request.ProductId, request.Quantity, now);
         await _context.SaveChangesAsync(cancellationToken);
 
-        var items = await _context.LoadPurchasableLinesAsync(cart.Id, cancellationToken);
+        var items = await _context.LoadActiveLinesAsync(cart.Id, cancellationToken);
 
         return Result<CartResponse>.Success(new CartResponse(cart.Id, items, items.Sum(i => i.Subtotal)));
     }
