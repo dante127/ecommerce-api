@@ -22,8 +22,6 @@ public sealed class StripePaymentGateway : IPaymentGateway
         _secretKey = configuration["Stripe:SecretKey"] ?? string.Empty;
         _webhookSecret = configuration["Stripe:WebhookSecret"] ?? string.Empty;
         _logger = logger;
-
-        StripeConfiguration.ApiKey = _secretKey;
     }
 
     public async Task<PaymentSessionResult> CreateCheckoutSessionAsync(
@@ -71,8 +69,14 @@ public sealed class StripePaymentGateway : IPaymentGateway
             }
         };
 
+        // Credentials travel with the request instead of the process-global StripeConfiguration.ApiKey,
+        // which a scoped service must never mutate: it is a last-write-wins race and a
+        // cross-tenant/cross-test hazard.
         var service = new SessionService();
-        var session = await service.CreateAsync(options, cancellationToken: cancellationToken);
+        var session = await service.CreateAsync(
+            options,
+            new RequestOptions { ApiKey = _secretKey },
+            cancellationToken);
 
         return new PaymentSessionResult(session.Id, session.Url);
     }
