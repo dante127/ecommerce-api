@@ -94,6 +94,28 @@ public sealed class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategor
             return Result<CategoryResponse>.Failure(Error.Conflict("Category.SlugExists", "Another category already uses this slug."));
         }
 
+        // Reject moves that would create a cycle: walking up from the proposed parent must not
+        // reach the category being moved. The depth guard also terminates on a pre-existing cycle
+        // in legacy data instead of looping forever.
+        if (request.ParentId.HasValue)
+        {
+            Guid? ancestorId = request.ParentId;
+            var depth = 0;
+            while (ancestorId.HasValue && depth++ < 128)
+            {
+                if (ancestorId.Value == request.Id)
+                {
+                    return Result<CategoryResponse>.Failure(
+                        Error.Conflict("Category.CycleDetected", "A category cannot be moved under one of its own subcategories."));
+                }
+
+                ancestorId = await _context.Categories
+                    .Where(c => c.Id == ancestorId.Value)
+                    .Select(c => c.ParentId)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+        }
+
         var now = _timeProvider.GetUtcNow();
         category.Update(request.Name, request.Slug, request.ParentId, now);
         await _context.SaveChangesAsync(cancellationToken);
@@ -124,6 +146,14 @@ public sealed class DeleteCategoryCommandHandler : IRequestHandler<DeleteCategor
         if (category == null)
         {
             return Result.Failure(Error.NotFound("Category.NotFound", "Category not found."));
+        }
+
+        // Subcategories reference their parent with a Restrict FK; without this check the delete
+        // surfaces as an unhandled FK violation (500) instead of a client-actionable conflict.
+        var hasSubcategories = await _context.Categories.AnyAsync(c => c.ParentId == request.Id, cancellationToken);
+        if (hasSubcategories)
+        {
+            return Result.Failure(Error.Conflict("Category.HasSubcategories", "Cannot delete a category that has subcategories. Move or delete them first."));
         }
 
         // Validate active products
